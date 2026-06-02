@@ -185,8 +185,8 @@ async function main() {
 
   // Register Web UI Mock Dashboard Route if React dashboard is built
   fastify.get('/', async (request, reply) => {
-    const dashboardHtml = path.join(publicDir, 'index.html');
-    if (fs.existsSync(dashboardHtml)) {
+    const landingHtml = path.join(publicDir, 'index.html');
+    if (fs.existsSync(landingHtml)) {
       return reply.sendFile('index.html');
     }
     
@@ -260,6 +260,14 @@ async function main() {
       </body>
       </html>
     `;
+  });
+
+  fastify.get('/dashboard', async (request, reply) => {
+    const dashboardHtml = path.join(publicDir, 'dashboard.html');
+    if (fs.existsSync(dashboardHtml)) {
+      return reply.sendFile('dashboard.html');
+    }
+    reply.status(404).send({ error: 'Dashboard file not found' });
   });
 
   // Start Server

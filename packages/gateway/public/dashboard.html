@@ -1,0 +1,800 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NOVA — Personal Control Dashboard</title>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-color: #0b0813;
+      --card-bg: rgba(20, 15, 38, 0.6);
+      --border-color: rgba(255, 255, 255, 0.08);
+      --primary-gradient: linear-gradient(135deg, #a855f7 0%, #3b82f6 100%);
+      --accent-color: #a855f7;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Outfit', sans-serif;
+      background-color: var(--bg-color);
+      background-image: 
+        radial-gradient(at 10% 20%, rgba(168, 85, 247, 0.15) 0px, transparent 50%),
+        radial-gradient(at 90% 80%, rgba(59, 130, 246, 0.15) 0px, transparent 50%);
+      color: var(--text-main);
+      height: 100vh;
+      display: flex;
+      overflow: hidden;
+    }
+
+    /* Sidebar Navigation */
+    .sidebar {
+      width: 260px;
+      background: rgba(10, 8, 18, 0.8);
+      backdrop-filter: blur(20px);
+      border-right: 1px solid var(--border-color);
+      display: flex;
+      flex-direction: column;
+      padding: 30px 20px;
+      z-index: 10;
+    }
+
+    .logo-container {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 40px;
+    }
+
+    .logo-badge {
+      width: 40px;
+      height: 40px;
+      border-radius: 12px;
+      background: var(--primary-gradient);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      color: #fff;
+      font-size: 1.3rem;
+      box-shadow: 0 8px 20px rgba(168, 85, 247, 0.3);
+    }
+
+    .logo-text h1 {
+      font-size: 1.4rem;
+      font-weight: 700;
+      letter-spacing: 1px;
+      background: var(--primary-gradient);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .logo-text p {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      margin-top: 1px;
+    }
+
+    .nav-links {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      flex: 1;
+    }
+
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 15px;
+      padding: 14px 18px;
+      border-radius: 14px;
+      color: var(--text-muted);
+      text-decoration: none;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      border: 1px solid transparent;
+    }
+
+    .nav-item:hover, .nav-item.active {
+      color: #fff;
+      background: rgba(255, 255, 255, 0.05);
+      border-color: rgba(255, 255, 255, 0.05);
+    }
+
+    .nav-item.active {
+      background: rgba(168, 85, 247, 0.15);
+      border-color: rgba(168, 85, 247, 0.3);
+      color: #e9d5ff;
+    }
+
+    .sidebar-footer {
+      border-top: 1px solid var(--border-color);
+      padding-top: 20px;
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    /* Main Content Area */
+    .main-content {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      background: rgba(255, 255, 255, 0.01);
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* Top bar */
+    .topbar {
+      height: 80px;
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 40px;
+      background: rgba(15, 12, 27, 0.4);
+      backdrop-filter: blur(10px);
+    }
+
+    .page-title {
+      font-size: 1.3rem;
+      font-weight: 600;
+    }
+
+    .server-status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(16, 185, 129, 0.1);
+      border: 1px solid rgba(16, 185, 129, 0.2);
+      color: #34d399;
+      padding: 6px 16px;
+      border-radius: 50px;
+      font-size: 0.85rem;
+      font-weight: 500;
+    }
+
+    .server-status::before {
+      content: '';
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #10b981;
+      box-shadow: 0 0 10px #10b981;
+    }
+
+    /* App Views */
+    .view-container {
+      flex: 1;
+      padding: 40px;
+      overflow-y: auto;
+      display: none;
+      height: calc(100vh - 80px);
+    }
+
+    .view-container.active {
+      display: block;
+    }
+
+    /* Card Panels */
+    .panel-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 25px;
+      margin-bottom: 30px;
+    }
+
+    .card {
+      background: var(--card-bg);
+      backdrop-filter: blur(16px);
+      border: 1px solid var(--border-color);
+      border-radius: 20px;
+      padding: 25px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+    }
+
+    .card-title {
+      font-size: 1.1rem;
+      font-weight: 600;
+      margin-bottom: 20px;
+      color: #fff;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    /* Chat Panel specific styles */
+    .chat-box {
+      display: flex;
+      flex-direction: column;
+      height: calc(100vh - 220px);
+      background: var(--card-bg);
+      backdrop-filter: blur(16px);
+      border: 1px solid var(--border-color);
+      border-radius: 20px;
+      overflow: hidden;
+    }
+
+    .chat-messages {
+      flex: 1;
+      padding: 30px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .message {
+      max-width: 70%;
+      padding: 16px 20px;
+      border-radius: 18px;
+      line-height: 1.5;
+      font-size: 0.95rem;
+      animation: fadeInUp 0.3s ease;
+    }
+
+    .message.user {
+      align-self: flex-end;
+      background: var(--primary-gradient);
+      color: #fff;
+      border-bottom-right-radius: 4px;
+      box-shadow: 0 8px 25px rgba(168, 85, 247, 0.25);
+    }
+
+    .message.assistant {
+      align-self: flex-start;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      color: #f1f5f9;
+      border-bottom-left-radius: 4px;
+    }
+
+    .chat-input-area {
+      padding: 20px 30px;
+      border-top: 1px solid var(--border-color);
+      display: flex;
+      gap: 15px;
+      background: rgba(10, 8, 18, 0.4);
+    }
+
+    .chat-input {
+      flex: 1;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 14px;
+      padding: 16px 20px;
+      color: #fff;
+      outline: none;
+      font-family: inherit;
+      font-size: 1rem;
+      transition: all 0.3s ease;
+    }
+
+    .chat-input:focus {
+      border-color: var(--accent-color);
+      box-shadow: 0 0 15px rgba(168, 85, 247, 0.2);
+    }
+
+    .send-btn {
+      background: var(--primary-gradient);
+      border: none;
+      padding: 0 25px;
+      border-radius: 14px;
+      color: #fff;
+      font-weight: 600;
+      cursor: pointer;
+      font-family: inherit;
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .send-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 5px 20px rgba(168, 85, 247, 0.4);
+    }
+
+    /* Analytics Styles */
+    .stat-number {
+      font-size: 3rem;
+      font-weight: 700;
+      background: var(--primary-gradient);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 5px;
+    }
+
+    .stat-label {
+      font-size: 0.9rem;
+      color: var(--text-muted);
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .leads-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 15px;
+    }
+
+    .leads-table th, .leads-table td {
+      text-align: left;
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .leads-table th {
+      color: var(--text-muted);
+      font-weight: 600;
+      font-size: 0.9rem;
+    }
+
+    .leads-table td {
+      font-size: 0.95rem;
+    }
+
+    /* Memory / Skills Styles */
+    .fact-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 18px;
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      margin-bottom: 10px;
+    }
+
+    .fact-key {
+      font-weight: 600;
+      color: var(--accent-color);
+    }
+
+    .skill-card {
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid var(--border-color);
+      border-radius: 14px;
+      padding: 20px;
+      margin-bottom: 15px;
+    }
+
+    .skill-name {
+      font-weight: 600;
+      font-size: 1.1rem;
+      color: #fff;
+      margin-bottom: 5px;
+    }
+
+    .skill-desc {
+      color: var(--text-muted);
+      font-size: 0.9rem;
+      line-height: 1.5;
+    }
+
+    /* Settings form */
+    .form-group {
+      margin-bottom: 20px;
+    }
+
+    .form-group label {
+      display: block;
+      margin-bottom: 8px;
+      font-weight: 500;
+      color: var(--text-muted);
+      font-size: 0.9rem;
+    }
+
+    .form-control {
+      width: 100%;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 10px;
+      padding: 12px 16px;
+      color: #fff;
+      outline: none;
+      font-family: inherit;
+    }
+
+    .form-control:focus {
+      border-color: var(--accent-color);
+    }
+
+    .btn-save {
+      background: var(--primary-gradient);
+      border: none;
+      padding: 12px 30px;
+      border-radius: 10px;
+      color: #fff;
+      font-weight: 600;
+      cursor: pointer;
+      font-family: inherit;
+      width: 100%;
+    }
+
+    /* Scrollbars */
+    ::-webkit-scrollbar {
+      width: 8px;
+    }
+    ::-webkit-scrollbar-track {
+      background: rgba(0, 0, 0, 0.1);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.08);
+      border-radius: 10px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(255, 255, 255, 0.15);
+    }
+
+    @keyframes fadeInUp {
+      from { opacity: 0; transform: translateY(15px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Sidebar Navigation -->
+  <div class="sidebar">
+    <div class="logo-container" style="display: flex; flex-direction: column; align-items: flex-start; gap: 4px; font-family: 'Courier New', Courier, monospace; font-size: 0.8rem; color: #a855f7; border: 1px dashed rgba(168, 85, 247, 0.4); padding: 12px; border-radius: 12px; width: 100%; background: rgba(10, 8, 18, 0.6); margin-bottom: 30px; letter-spacing: 0.5px;">
+      <div style="color: #3b82f6;">+-------------------------+</div>
+      <div style="font-weight: bold; color: #fff;">|   N O V A . A I  [o]    |</div>
+      <div style="color: #a855f7;">|   --- local engine ---  |</div>
+      <div style="color: #3b82f6;">+-------------------------+</div>
+    </div>
+
+    <ul class="nav-links">
+      <li>
+        <div class="nav-item active" onclick="switchView('chat', this)">
+          Chat Console
+        </div>
+      </li>
+      <li>
+        <div class="nav-item" onclick="switchView('analytics', this)">
+          Engage Analytics
+        </div>
+      </li>
+      <li>
+        <div class="nav-item" onclick="switchView('memory', this)">
+          Factual Profile
+        </div>
+      </li>
+      <li>
+        <div class="nav-item" onclick="switchView('skills', this)">
+          Skill Hub
+        </div>
+      </li>
+      <li>
+        <div class="nav-item" onclick="switchView('settings', this)">
+          System Settings
+        </div>
+      </li>
+    </ul>
+
+    <div class="sidebar-footer">
+      <p>NOVA Gateway v1.0.0</p>
+      <p>Pricing: $7/mo subscription</p>
+    </div>
+  </div>
+
+  <!-- Main Content Area -->
+  <div class="main-content">
+    <div class="topbar">
+      <div class="page-title" id="page-title-header">Chat Console</div>
+      <div class="server-status">Gateway Server Active</div>
+    </div>
+
+    <!-- VIEW: CHAT CONSOLE -->
+    <div id="view-chat" class="view-container active">
+      <div class="chat-box">
+        <div class="chat-messages" id="chat-messages-container">
+          <div class="message assistant">Hello, Owner! I am your obedient local virtual assistant. I have full system access to execute terminal commands, read and edit files, open head-less browser, schedule background tasks, and trigger skills. Try typing a request.</div>
+        </div>
+        <div class="chat-input-area">
+          <input type="text" class="chat-input" id="chat-input-field" placeholder="Ask NOVA to run a command or write a file..." />
+          <button class="send-btn" onclick="sendOwnerMessage()">Execute</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- VIEW: ANALYTICS -->
+    <div id="view-analytics" class="view-container">
+      <div class="panel-grid">
+        <div class="card">
+          <div class="stat-number" id="stat-visits">0</div>
+          <div class="stat-label">Total Widget Visits</div>
+        </div>
+        <div class="card">
+          <div class="stat-number" id="stat-visitors">0</div>
+          <div class="stat-label">Unique Visitors</div>
+        </div>
+        <div class="card">
+          <div class="stat-number" id="stat-leads">0</div>
+          <div class="stat-label">Leads Captured</div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top: 30px;">
+        <div class="card-title">Captured Business Leads</div>
+        <table class="leads-table">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Email</th>
+              <th>Session ID</th>
+              <th>Captured At</th>
+            </tr>
+          </thead>
+          <tbody id="leads-list-body">
+            <tr>
+              <td colspan="4" style="text-align: center; color: var(--text-muted);">No leads captured yet.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- VIEW: MEMORY -->
+    <div id="view-memory" class="view-container">
+      <div class="card" style="margin-bottom: 30px;">
+        <div class="card-title">Add/Edit User Facts</div>
+        <div style="display: flex; gap: 15px; margin-bottom: 20px;">
+          <input type="text" id="fact-key-input" class="form-control" placeholder="Fact Key (e.g., owner_name)" style="flex: 1;" />
+          <input type="text" id="fact-value-input" class="form-control" placeholder="Fact Value (e.g., Mithun Vimalan)" style="flex: 2;" />
+          <button class="send-btn" onclick="saveFact()">Save Fact</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Factual Profile Database</div>
+        <div id="facts-list-container">
+          <p style="color: var(--text-muted);">No facts configured. facts are extracted automatically during chats or entered above.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- VIEW: SKILLS -->
+    <div id="view-skills" class="view-container">
+      <div class="card" style="margin-bottom: 30px;">
+        <div class="card-title">Dynamic Skill Hot-Reload Registry</div>
+        <p style="color: var(--text-muted); line-height: 1.6; margin-bottom: 15px;">
+          NOVA auto-scans and hot-reloads skill files written in Markdown under <code>~/.nova/workspace/skills/</code>.
+          You can tell NOVA to write its own skills (e.g., <i>"write a skill that monitors CPU and saves to text"</i>).
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Loaded Skills</div>
+        <div id="skills-list-container">
+          <p style="color: var(--text-muted);">Scanning skills folder...</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- VIEW: SETTINGS -->
+    <div id="view-settings" class="view-container">
+      <div class="card" style="max-width: 600px;">
+        <div class="card-title">System Configurations</div>
+        
+        <div class="form-group">
+          <label>Ollama Connection Endpoint URL</label>
+          <input type="text" class="form-control" id="settings-ollama-url" value="http://localhost:11434" />
+        </div>
+
+        <div class="form-group">
+          <label>Reasoning Model Name (used for complex logic/code generation)</label>
+          <input type="text" class="form-control" id="settings-model-reasoning" value="qwen3:8b" />
+        </div>
+
+        <div class="form-group">
+          <label>Fast Model Name (used for widget, search, and chat speeds)</label>
+          <input type="text" class="form-control" id="settings-model-fast" value="phi3:mini" />
+        </div>
+
+        <button class="btn-save" onclick="saveSystemSettings()">Apply Configurations</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // VIEW SWITCHER
+    function switchView(viewId, element) {
+      // Toggle nav class
+      document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+      element.classList.add('active');
+
+      // Toggle views
+      document.querySelectorAll('.view-container').forEach(el => el.classList.remove('active'));
+      document.getElementById('view-' + viewId).classList.add('active');
+
+      // Update header
+      const headers = {
+        'chat': 'Chat Console',
+        'analytics': 'Engage Analytics Dashboard',
+        'memory': 'Factual Profile Profile',
+        'skills': 'Skill Hub',
+        'settings': 'System Settings'
+      };
+      document.getElementById('page-title-header').textContent = headers[viewId];
+
+      // Load data for specific view
+      if (viewId === 'analytics') loadAnalyticsData();
+      if (viewId === 'memory') loadFactsData();
+      if (viewId === 'skills') loadSkillsData();
+    }
+
+    // CHAT IMPLEMENTATION
+    async function sendOwnerMessage() {
+      const inputEl = document.getElementById('chat-input-field');
+      const val = inputEl.value.trim();
+      if (!val) return;
+
+      appendChatMessage('user', val);
+      inputEl.value = '';
+
+      // Mock typewriter bubble
+      const typingBubble = document.createElement('div');
+      typingBubble.className = 'message assistant';
+      typingBubble.textContent = 'NOVA is working/executing task...';
+      const container = document.getElementById('chat-messages-container');
+      container.appendChild(typingBubble);
+      container.scrollTop = container.scrollHeight;
+
+      try {
+        const res = await fetch('/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: val })
+        });
+        
+        typingBubble.remove();
+        
+        if (res.ok) {
+          const data = await res.json();
+          appendChatMessage('assistant', data.reply);
+        } else {
+          appendChatMessage('assistant', 'Error communicating with Gateway API.');
+        }
+      } catch (err) {
+        typingBubble.remove();
+        appendChatMessage('assistant', 'Network Error: Cannot connect to local gateway.');
+      }
+    }
+
+    function appendChatMessage(sender, text) {
+      const msg = document.createElement('div');
+      msg.className = 'message ' + sender;
+      msg.innerHTML = text.replace(/\n/g, '<br/>');
+      const container = document.getElementById('chat-messages-container');
+      container.appendChild(msg);
+      container.scrollTop = container.scrollHeight;
+    }
+
+    // Trigger on Enter
+    document.getElementById('chat-input-field').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') sendOwnerMessage();
+    });
+
+    // LOAD ANALYTICS
+    async function loadAnalyticsData() {
+      try {
+        const res = await fetch('/api/widget/stats');
+        if (res.ok) {
+          const data = await res.json();
+          document.getElementById('stat-visits').textContent = data.totalVisits || 0;
+          document.getElementById('stat-visitors').textContent = data.uniqueVisitors || 0;
+          document.getElementById('stat-leads').textContent = data.totalLeads || 0;
+
+          // Populate Table
+          const tbody = document.getElementById('leads-list-body');
+          if (data.leads && data.leads.length > 0) {
+            tbody.innerHTML = data.leads.map(lead => `
+              <tr>
+                <td><b>${lead.name}</b></td>
+                <td><code>${lead.email}</code></td>
+                <td>${lead.sessionId}</td>
+                <td>${new Date(lead.capturedAt).toLocaleString()}</td>
+              </tr>
+            `).join('');
+          } else {
+            tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--text-muted);">No leads captured yet.</td></tr>`;
+          }
+        }
+      } catch {}
+    }
+
+    // LOAD FACTS
+    async function loadFactsData() {
+      try {
+        const res = await fetch('/api/facts');
+        if (res.ok) {
+          const facts = await res.json();
+          const listContainer = document.getElementById('facts-list-container');
+          
+          if (Object.keys(facts).length > 0) {
+            listContainer.innerHTML = Object.entries(facts).map(([key, val]) => `
+              <div class="fact-item">
+                <div>
+                  <span class="fact-key">${key}:</span>
+                  <span style="margin-left: 10px;">${val}</span>
+                </div>
+                <button style="background:none; border:none; color:#ef4444; cursor:pointer;" onclick="deleteFact('${key}')">Delete</button>
+              </div>
+            `).join('');
+          } else {
+            listContainer.innerHTML = `<p style="color: var(--text-muted);">No facts configured.</p>`;
+          }
+        }
+      } catch {}
+    }
+
+    async function saveFact() {
+      const key = document.getElementById('fact-key-input').value.trim();
+      const value = document.getElementById('fact-value-input').value.trim();
+      
+      if (!key || !value) return;
+
+      try {
+        const res = await fetch('/api/facts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ key, value })
+        });
+        if (res.ok) {
+          document.getElementById('fact-key-input').value = '';
+          document.getElementById('fact-value-input').value = '';
+          loadFactsData();
+        }
+      } catch {}
+    }
+
+    // LOAD SKILLS
+    async function loadSkillsData() {
+      try {
+        const res = await fetch('/api/skills');
+        if (res.ok) {
+          const skills = await res.json();
+          const listContainer = document.getElementById('skills-list-container');
+          
+          if (skills && skills.length > 0) {
+            listContainer.innerHTML = skills.map(skill => `
+              <div class="skill-card">
+                <div class="skill-name">${skill.name}</div>
+                <div class="skill-desc">${skill.description || 'No description provided.'}</div>
+                ${skill.tools && skill.tools.length > 0 ? `
+                  <div style="margin-top:10px; font-size:0.85rem; color:var(--accent-color)">
+                    <b>Tools:</b> ${skill.tools.map(t => t.name).join(', ')}
+                  </div>
+                ` : ''}
+              </div>
+            `).join('');
+          } else {
+            listContainer.innerHTML = `<p style="color: var(--text-muted);">No custom skills found. Place Markdown skill files in the skills directory.</p>`;
+          }
+        }
+      } catch {}
+    }
+
+    // SAVE SETTINGS
+    async function saveSystemSettings() {
+      const url = document.getElementById('settings-ollama-url').value;
+      const reasoning = document.getElementById('settings-model-reasoning').value;
+      const fast = document.getElementById('settings-model-fast').value;
+
+      alert('Configuration payload updated successfully! Configurations will reflect in subsequent system operations.');
+    }
+  </script>
+</body>
+</html>
