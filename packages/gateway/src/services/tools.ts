@@ -92,14 +92,38 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
   }
 ];
 
+async function executeCommandInDockerSandbox(
+  command: string, 
+  image: string = 'alpine'
+): Promise<{ success: boolean; output: string }> {
+  try {
+    // Escape single quotes for shell string
+    const escapedCommand = command.replace(/'/g, "'\\''");
+    
+    // Enforce 256MB memory cap, 0.5 CPU limit, and block network access entirely
+    const dockerCmd = `docker run --rm -m 256m --cpus="0.5" --network none ${image} sh -c '${escapedCommand}'`;
+    const { stdout, stderr } = await execPromise(dockerCmd);
+    
+    return {
+      success: true,
+      output: `[Sandboxed Run] Stdout:\n${stdout}\nStderr:\n${stderr}`
+    };
+  } catch (err: any) {
+    return {
+      success: false,
+      output: `Docker Sandboxing Error: ${err.message}. (Ensure Docker Desktop is running on host for guest operations)`
+    };
+  }
+}
+
 export async function executeTool(
   toolName: string,
   args: any,
   context: ToolContext
 ): Promise<{ success: boolean; output: string }> {
-  // Security Sandbox Check
-  const requiresOwner = ['bash', 'file_write', 'browser', 'code_exec', 'skill_write'];
-  if (requiresOwner.includes(toolName) && !context.isOwner) {
+  // Security Sandbox Check - Critical Blockers
+  const requiresOwnerOnly = ['file_write', 'browser', 'skill_write'];
+  if (requiresOwnerOnly.includes(toolName) && !context.isOwner) {
     return {
       success: false,
       output: `Security Exception: Guest sessions cannot invoke '${toolName}'. Access Denied.`
@@ -109,6 +133,11 @@ export async function executeTool(
   try {
     switch (toolName) {
       case 'bash': {
+        if (!context.isOwner) {
+          // Route untrusted command lines to Docker container
+          return await executeCommandInDockerSandbox(args.command, 'alpine');
+        }
+        
         const { stdout, stderr } = await execPromise(args.command);
         return {
           success: true,
@@ -208,6 +237,41 @@ export async function executeTool(
         const tempDir = path.join(loadConfig().paths.memory, 'temp');
         if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
         
+        if (!context.isOwner) {
+          if (args.language === 'javascript') {
+            const filename = `script-${Date.now()}.js`;
+            const scriptPath = path.join(tempDir, filename);
+            fs.writeFileSync(scriptPath, args.code, 'utf-8');
+            try {
+              // Mount temp folder as read-only, limit resources, and run node-alpine container
+              const { stdout, stderr } = await execPromise(
+                `docker run --rm -v "${tempDir}":/sandbox:ro -m 256m --cpus="0.5" --network none node:22-alpine node /sandbox/${filename}`
+              );
+              fs.unlinkSync(scriptPath);
+              return { success: true, output: `[Sandboxed Run] Stdout:\n${stdout}\nStderr:\n${stderr}` };
+            } catch (e: any) {
+              if (fs.existsSync(scriptPath)) fs.unlinkSync(scriptPath);
+              return { success: false, output: `Docker Javascript Sandbox Error: ${e.message}. (Ensure Docker is running)` };
+            }
+          } else if (args.language === 'python') {
+            const filename = `script-${Date.now()}.py`;
+            const scriptPath = path.join(tempDir, filename);
+            fs.writeFileSync(scriptPath, args.code, 'utf-8');
+            try {
+              // Mount temp folder as read-only, limit resources, and run python-alpine container
+              const { stdout, stderr } = await execPromise(
+                `docker run --rm -v "${tempDir}":/sandbox:ro -m 256m --cpus="0.5" --network none python:3.10-alpine python /sandbox/${filename}`
+              );
+              fs.unlinkSync(scriptPath);
+              return { success: true, output: `[Sandboxed Run] Stdout:\n${stdout}\nStderr:\n${stderr}` };
+            } catch (e: any) {
+              if (fs.existsSync(scriptPath)) fs.unlinkSync(scriptPath);
+              return { success: false, output: `Docker Python Sandbox Error: ${e.message}. (Ensure Docker is running)` };
+            }
+          }
+        }
+
+        // Owner direct execution (No container overhead)
         if (args.language === 'javascript') {
           const scriptPath = path.join(tempDir, `script-${Date.now()}.js`);
           fs.writeFileSync(scriptPath, args.code, 'utf-8');
