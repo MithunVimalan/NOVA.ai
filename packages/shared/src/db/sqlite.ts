@@ -26,6 +26,16 @@ export interface Lead {
   capturedAt: string;
 }
 
+export interface Tenant {
+  id: string;
+  name: string;
+  telegramEnabled: number;
+  telegramToken: string;
+  whatsappEnabled: number;
+  whatsappToken: string;
+  stripeStatus: string;
+}
+
 export class SqliteManager {
   private memoryPath: string;
   private dbPath: string;
@@ -37,7 +47,8 @@ export class SqliteManager {
     facts: Record<string, Fact>;
     visitors: VisitorEvent[];
     leads: Lead[];
-  } = { facts: {}, visitors: [], leads: [] };
+    tenants: Tenant[];
+  } = { facts: {}, visitors: [], leads: [], tenants: [] };
 
   constructor() {
     const config = loadConfig();
@@ -92,6 +103,15 @@ export class SqliteManager {
         email TEXT,
         captured_at TEXT
       );
+      CREATE TABLE IF NOT EXISTS tenants (
+        id TEXT PRIMARY KEY,
+        name TEXT,
+        telegram_enabled INTEGER DEFAULT 0,
+        telegram_token TEXT,
+        whatsapp_enabled INTEGER DEFAULT 0,
+        whatsapp_token TEXT,
+        stripe_status TEXT DEFAULT 'active'
+      );
     `);
   }
 
@@ -104,6 +124,7 @@ export class SqliteManager {
         if (!this.cache.facts) this.cache.facts = {};
         if (!this.cache.visitors) this.cache.visitors = [];
         if (!this.cache.leads) this.cache.leads = [];
+        if (!this.cache.tenants) this.cache.tenants = [];
       } catch (err) {
         console.error(`[Database] Error reading fallback DB file, resetting:`, err);
       }
@@ -246,6 +267,93 @@ export class SqliteManager {
         return stmt.all() as Lead[];
       } catch (e) {
         console.error(`[Database] getLeads failed:`, e);
+        return [];
+      }
+    }
+  }
+
+  // TENANT OPERATIONS
+  public addTenant(tenant: Tenant): void {
+    if (this.isFallback) {
+      this.cache.tenants = this.cache.tenants || [];
+      const idx = this.cache.tenants.findIndex(t => t.id === tenant.id);
+      if (idx >= 0) {
+        this.cache.tenants[idx] = tenant;
+      } else {
+        this.cache.tenants.push(tenant);
+      }
+      this.saveFallbackData();
+    } else {
+      try {
+        const stmt = this.dbInstance.prepare(`
+          INSERT INTO tenants (id, name, telegram_enabled, telegram_token, whatsapp_enabled, whatsapp_token, stripe_status)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(id) DO UPDATE SET 
+            name=excluded.name,
+            telegram_enabled=excluded.telegram_enabled,
+            telegram_token=excluded.telegram_token,
+            whatsapp_enabled=excluded.whatsapp_enabled,
+            whatsapp_token=excluded.whatsapp_token,
+            stripe_status=excluded.stripe_status
+        `);
+        stmt.run(
+          tenant.id,
+          tenant.name,
+          tenant.telegramEnabled,
+          tenant.telegramToken,
+          tenant.whatsappEnabled,
+          tenant.whatsappToken,
+          tenant.stripeStatus
+        );
+      } catch (e) {
+        console.error(`[Database] addTenant failed:`, e);
+      }
+    }
+  }
+
+  public getTenant(id: string): Tenant | null {
+    if (this.isFallback) {
+      this.cache.tenants = this.cache.tenants || [];
+      return this.cache.tenants.find(t => t.id === id) || null;
+    } else {
+      try {
+        const stmt = this.dbInstance.prepare('SELECT * FROM tenants WHERE id = ?');
+        const row = stmt.get(id);
+        if (!row) return null;
+        return {
+          id: row.id,
+          name: row.name,
+          telegramEnabled: row.telegram_enabled,
+          telegramToken: row.telegram_token,
+          whatsappEnabled: row.whatsapp_enabled,
+          whatsappToken: row.whatsapp_token,
+          stripeStatus: row.stripe_status
+        };
+      } catch (e) {
+        console.error(`[Database] getTenant failed:`, e);
+        return null;
+      }
+    }
+  }
+
+  public getAllTenants(): Tenant[] {
+    if (this.isFallback) {
+      return this.cache.tenants || [];
+    } else {
+      try {
+        const stmt = this.dbInstance.prepare('SELECT * FROM tenants');
+        const rows = stmt.all() as any[];
+        return rows.map(row => ({
+          id: row.id,
+          name: row.name,
+          telegramEnabled: row.telegram_enabled,
+          telegramToken: row.telegram_token,
+          whatsappEnabled: row.whatsapp_enabled,
+          whatsappToken: row.whatsapp_token,
+          stripeStatus: row.stripe_status
+        }));
+      } catch (e) {
+        console.error(`[Database] getAllTenants failed:`, e);
         return [];
       }
     }

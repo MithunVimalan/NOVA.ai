@@ -6,6 +6,7 @@ import {
 } from '@nova/shared';
 import { executeTool, BUILT_IN_TOOLS, ToolContext } from './tools.js';
 import { getSkillService } from './skills.js';
+import { getHeartbeatService } from './heartbeat.js';
 
 export interface SessionState {
   sessionId: string;
@@ -40,9 +41,23 @@ export class SessionManager {
     sessionId: string,
     messageText: string,
     isOwner: boolean = false,
-    channelType: 'telegram' | 'whatsapp' | 'web' | 'widget' = 'web'
+    channelType: 'telegram' | 'whatsapp' | 'web' | 'widget' | 'voice' = 'web'
   ): Promise<string> {
     const session = this.getOrCreateSession(sessionId, isOwner);
+    
+    // Check if session is in manual takeover mode (and message is from a Guest)
+    if ((session as any).isManualTakeover && !isOwner) {
+      session.history.push({ role: 'user', content: messageText });
+      
+      // Dispatch alert to owner
+      const heartbeatService = getHeartbeatService();
+      heartbeatService.notifyOwner(
+        `[NOVA Takeover Alert] Session "${sessionId}" on "${channelType}" sent: "${messageText}".`
+      );
+      
+      return "A representative has been notified and will respond to you shortly.";
+    }
+
     const sqliteDb = getSqliteManager();
     const vectorDb = getVectorDbManager();
     const skillService = getSkillService();
@@ -55,7 +70,7 @@ export class SessionManager {
 
     // 2. Fetch business RAG catalog context (for widget customer bots)
     let catalogString = '';
-    if (channelType === 'widget' || channelType === 'whatsapp' || channelType === 'telegram') {
+    if (channelType === 'widget' || channelType === 'whatsapp' || channelType === 'telegram' || channelType === 'voice') {
       const catalogMatches = await vectorDb.searchCatalog(messageText, 3);
       if (catalogMatches.length > 0) {
         catalogString = `Relevant Business Documents & Catalog Context:\n` +

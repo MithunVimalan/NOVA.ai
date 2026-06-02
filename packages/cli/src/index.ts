@@ -167,6 +167,7 @@ Welcome to NOVA Onboard Assistant! Let's get you set up.
         widget: currentConfig.channels.widget,
       },
       paths: currentConfig.paths,
+      voice: currentConfig.voice,
     };
 
     saveConfig(newConfig);

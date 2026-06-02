@@ -29,6 +29,16 @@ export const ConfigSchema = z.object({
     memory: z.string().default(''),
     skills: z.string().default(''),
   }).default({}),
+  voice: z.object({
+    sttProvider: z.enum(['local', 'deepgram']).default('local'),
+    ttsProvider: z.enum(['local', 'elevenlabs']).default('local'),
+    deepgramApiKey: z.string().default(''),
+    elevenlabsApiKey: z.string().default(''),
+    elevenlabsVoiceId: z.string().default('21m00Tcm4TlvDq8ikWAM'),
+    piperPath: z.string().default('piper'),
+    piperModelPath: z.string().default(''),
+    whisperPath: z.string().default('whisper'),
+  }).default({}),
 });
 
 export type NovaConfig = z.infer<typeof ConfigSchema>;

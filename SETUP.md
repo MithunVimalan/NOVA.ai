@@ -161,3 +161,66 @@ NOVA uses a free, open-source WhatsApp Web protocol bridge. This means **no Meta
    - Search for your bot username on Telegram and click **Start** (or send `/start`).
    - The bot records your Telegram account ID as the system owner.
    - You can now type task requests (e.g., `"run dir C:\"` or `"create file list.txt"`) directly in the Telegram DM, and NOVA will execute them.
+
+---
+
+## 6. Production Hardening & Cloudflare Argo Tunnels
+
+To make your local gateway server accessible securely from the internet (for Telegram/WhatsApp webhooks and the Engage widget) without opening any inbound ports on your home or office router (port forwarding is highly vulnerable to scans), run an outbound **Cloudflare Argo Tunnel**.
+
+### Step-by-Step Tunnel Setup:
+1. **Install Cloudflare Tunnel CLI (`cloudflared`)**:
+   - **Windows**: `winget install Cloudflare.cloudflared`
+   - **Mac**: `brew install cloudflared`
+   - **Linux**: `curl -L --output /usr/local/bin/cloudflared https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 && chmod +x /usr/local/bin/cloudflared`
+
+2. **Authenticate with Cloudflare**:
+   ```bash
+   cloudflared tunnel login
+   ```
+   *This opens a browser window. Select your custom domain (e.g., `yourdomain.com`) to authorize the tunnel.*
+
+3. **Create the Tunnel**:
+   ```bash
+   cloudflared tunnel create nova-tunnel
+   ```
+   *This outputs a Tunnel ID (e.g. `12345678-abcd-1234-abcd-1234567890ab`).*
+
+4. **Write the Configuration File**:
+   Create a file at `~/.cloudflared/config.yml` with the following:
+   ```yaml
+   tunnel: 12345678-abcd-1234-abcd-1234567890ab
+   credentials-file: /root/.cloudflared/12345678-abcd-1234-abcd-1234567890ab.json
+
+   ingress:
+     - hostname: gateway.yourdomain.com
+       service: http://localhost:3000
+     - service: http_status:404
+   ```
+
+5. **Route DNS Traffic & Run**:
+   ```bash
+   # Add DNS CNAME mapping pointing your subdomain to the tunnel
+   cloudflared tunnel route dns nova-tunnel gateway.yourdomain.com
+
+   # Run the tunnel daemon
+   cloudflared tunnel run nova-tunnel
+   ```
+   *Your local Fastify gateway is now securely accessible via `https://gateway.yourdomain.com` over outbound-only connections.*
+
+---
+
+## 7. SaaS & Production Environment Variables
+
+Configure these environment variables in your deployment shell or systemd/PM2 environment settings:
+
+| Variable | Description | Security Level |
+|---|---|---|
+| `JWT_SECRET` | Secret key used to sign session cookies and dashboard auth tokens. | **CRITICAL** (Use random bytes) |
+| `NOVA_MASTER_ENCRYPTION_KEY` | Phrase key used for AES-256-GCM credentials encryption. | **CRITICAL** |
+| `REDIS_URL` | Redis endpoint URL (e.g., `redis://localhost:6379`). Unlocks BullMQ and rate limits. | **HIGH** |
+| `HUBSPOT_ACCESS_TOKEN` | HubSpot private app token for CRM contact synchronization. | **HIGH** |
+| `DEEPGRAM_API_KEY` | Deepgram Token used to override local Whisper STT voice processing. | **MEDIUM** |
+| `ELEVENLABS_API_KEY` | ElevenLabs API Key used to override local Piper TTS voice notes. | **MEDIUM** |
+| `ELEVENLABS_VOICE_ID` | Voice parameter ID to customize syntheses. Defaults to Rachel. | **LOW** |
+
