@@ -2,7 +2,7 @@
 
 import { Command } from 'commander';
 import inquirer from 'inquirer';
-import { execSync } from 'node:child_process';
+import { execSync, spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { loadConfig, saveConfig, getNovaHomeDir, NovaConfig } from '@nova/shared';
@@ -14,6 +14,56 @@ program
   .description('NOVA — Next-gen Obedient Virtual Assistant CLI Controller')
   .version('1.0.0');
 
+// Helper to pull models with a clean dash progress bar in foreground
+function pullModelWithProgress(modelName: string): Promise<void> {
+  return new Promise((resolve) => {
+    const child = spawn('ollama', ['pull', modelName]);
+    let lastPercentage = 0;
+
+    child.stdout.on('data', (data) => {
+      const text = data.toString();
+      const match = text.match(/(\d+(?:\.\d+)?)\%/);
+      if (match) {
+        lastPercentage = parseFloat(match[1]);
+      }
+      drawProgressBar(modelName, lastPercentage);
+    });
+
+    child.stderr.on('data', (data) => {
+      const text = data.toString();
+      const match = text.match(/(\d+(?:\.\d+)?)\%/);
+      if (match) {
+        lastPercentage = parseFloat(match[1]);
+      }
+      drawProgressBar(modelName, lastPercentage);
+    });
+
+    child.on('close', (code) => {
+      process.stdout.write('\r\x1b[K'); // Clear line
+      if (code === 0) {
+        console.log(`✓ Model "${modelName}" downloaded successfully.`);
+      } else {
+        console.log(`⚠️ Model "${modelName}" pull returned status code ${code}.`);
+      }
+      resolve();
+    });
+
+    child.on('error', () => {
+      process.stdout.write('\r\x1b[K');
+      console.log(`⚠️ Could not spawn Ollama client download command.`);
+      resolve();
+    });
+  });
+}
+
+function drawProgressBar(modelName: string, percentage: number) {
+  const barLength = 30;
+  const filledLength = Math.round((percentage / 100) * barLength);
+  const filled = '='.repeat(filledLength);
+  const empty = '-'.repeat(barLength - filledLength);
+  process.stdout.write(`\rDownloading ${modelName}: [${filled}${empty}] ${percentage.toFixed(1)}% `);
+}
+
 // COMMAND: onboard
 program
   .command('onboard')
@@ -21,12 +71,18 @@ program
   .option('--install-daemon', 'Automatically configure and launch background runner')
   .action(async (options) => {
     console.log(`
-███╗   ██╗ ██████╗ ██╗   ██╗ █████╗ 
-████╗  ██║██╔═══██╗██║   ██║██╔══██╗
-██╔██╗ ██║██║   ██║██║   ██║███████║
-██║╚████║██║   ██║╚██╗ ██╔╝██╔══██║
-██║ ╚███║╚██████╔╝ ╚████╔╝ ██║  ██║
-╚═╝  ╚═══╝ ╚═════╝   ╚═══╝  ╚═╝  ╚═╝
+--------------------------------------------------------------------
+|  --------------------------------------------------------------  |
+|  |  ███╗   ██╗  ██████╗  ██╗   ██╗  █████╗      █████╗  ██╗     |  |
+|  |  ████╗  ██║ ██╔═══██╗ ██║   ██║ ██╔══██╗    ██╔══██╗ ██║     |  |
+|  |  ██╔██╗ ██║ ██║   ██║ ╚██╗ ██╔╝ ███████║    ███████║ ██║     |  |
+|  |  ██║╚████║ ██║   ██║  ╚████╔╝  ██╔══██║    ██╔══██║ ██║     |  |
+|  |  ██║ ╚███║ ╚██████╔╝   ╚██╔╝   ██║  ██║    ██║  ██║ ██║     |  |
+|  |  ╚═╝  ╚═══╝  ╚═════╝     ╚═╝    ╚═╝  ╚═╝    ╚═╝  ╚═╝ ╚═╝     |  |
+|  --------------------------------------------------------------  |
+|                                                                  |
+|   --- Next-gen Obedient Virtual Assistant (Fully Local) -------   |
+--------------------------------------------------------------------
 Welcome to NOVA Onboard Assistant! Let's get you set up.
 `);
 
@@ -116,11 +172,11 @@ Welcome to NOVA Onboard Assistant! Let's get you set up.
     saveConfig(newConfig);
     console.log('\n✓ Configuration file saved successfully at ~/.nova/nova.json');
 
-    // Pull Ollama models in background
+    // Pull Ollama models in background with progress bars
     console.log('\nPulling configured Ollama models in background if missing...');
     try {
-      execSync(`ollama pull ${newConfig.modelRouting.fast}`, { stdio: 'inherit' });
-      execSync(`ollama pull ${newConfig.modelRouting.reasoning}`, { stdio: 'inherit' });
+      await pullModelWithProgress(newConfig.modelRouting.fast);
+      await pullModelWithProgress(newConfig.modelRouting.reasoning);
     } catch {
       console.warn('⚠️ Could not connect to local Ollama. Ensure Ollama is running (run "ollama serve").');
     }
