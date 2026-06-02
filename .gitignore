@@ -1,0 +1,12 @@
+node_modules/
+dist/
+*.log
+*.db
+*.local
+.env
+.nova/
+vectors_fallback.json
+nova_db_fallback.json
+whatsapp-auth/
+temp/
+screenshots/

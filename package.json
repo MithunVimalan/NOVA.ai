@@ -1,0 +1,17 @@
+{
+  "name": "nova-workspace",
+  "private": true,
+  "version": "1.0.0",
+  "description": "NOVA — Next-gen Obedient Virtual Assistant Monorepo",
+  "scripts": {
+    "build": "pnpm -r run build",
+    "dev": "pnpm --filter @nova/gateway run dev",
+    "start": "pnpm --filter @nova/gateway run start",
+    "test": "pnpm -r run test"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.5",
+    "@types/node": "^22.11.0",
+    "rimraf": "^5.0.7"
+  }
+}
