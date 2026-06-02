@@ -1,0 +1,799 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NOVA.ai — The AI Employee That Lives On Your Machine</title>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-dark: #07050f;
+      --card-bg: rgba(18, 12, 38, 0.4);
+      --border-color: rgba(255, 255, 255, 0.08);
+      --purple-glow: rgba(168, 85, 247, 0.15);
+      --blue-glow: rgba(59, 130, 246, 0.15);
+      --accent-purple: #a855f7;
+      --accent-blue: #3b82f6;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      font-family: 'Outfit', sans-serif;
+      background-color: var(--bg-dark);
+      background-image: 
+        radial-gradient(at 10% 10%, var(--purple-glow) 0px, transparent 45%),
+        radial-gradient(at 90% 90%, var(--blue-glow) 0px, transparent 45%);
+      color: var(--text-main);
+      line-height: 1.6;
+      overflow-x: hidden;
+    }
+
+    /* Floating Navbar */
+    header {
+      position: fixed;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 90%;
+      max-width: 1200px;
+      background: rgba(10, 8, 22, 0.7);
+      backdrop-filter: blur(20px);
+      border: 1px solid var(--border-color);
+      padding: 15px 30px;
+      border-radius: 50px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      z-index: 1000;
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+    }
+
+    .logo-container {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .logo-symbol {
+      font-family: monospace;
+      border: 1px dashed var(--accent-purple);
+      color: var(--accent-purple);
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-size: 0.85rem;
+      background: rgba(0,0,0,0.3);
+    }
+
+    .logo-text {
+      font-size: 1.4rem;
+      font-weight: 800;
+      letter-spacing: 0.5px;
+      background: linear-gradient(90deg, #a855f7, #3b82f6);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    nav {
+      display: flex;
+      gap: 25px;
+    }
+
+    nav a {
+      color: var(--text-muted);
+      text-decoration: none;
+      font-weight: 500;
+      transition: color 0.3s ease;
+      font-size: 0.95rem;
+    }
+
+    nav a:hover {
+      color: #fff;
+    }
+
+    .header-actions {
+      display: flex;
+      gap: 15px;
+      align-items: center;
+    }
+
+    .btn-secondary {
+      color: #fff;
+      text-decoration: none;
+      font-weight: 600;
+      font-size: 0.9rem;
+      transition: color 0.3s ease;
+    }
+
+    .btn-secondary:hover {
+      color: var(--accent-purple);
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, #a855f7 0%, #3b82f6 100%);
+      border: none;
+      color: #fff;
+      padding: 10px 24px;
+      border-radius: 50px;
+      font-weight: 600;
+      text-decoration: none;
+      box-shadow: 0 4px 15px rgba(168, 85, 247, 0.3);
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+      font-size: 0.9rem;
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 25px rgba(168, 85, 247, 0.5);
+    }
+
+    /* Hero Section */
+    .hero {
+      max-width: 1100px;
+      margin: 160px auto 80px auto;
+      text-align: center;
+      padding: 0 20px;
+    }
+
+    .hero-badge {
+      background: rgba(168, 85, 247, 0.12);
+      border: 1px solid rgba(168, 85, 247, 0.25);
+      color: #d8b4fe;
+      padding: 6px 16px;
+      border-radius: 50px;
+      display: inline-block;
+      font-size: 0.85rem;
+      font-weight: 600;
+      margin-bottom: 25px;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      font-size: 4rem;
+      font-weight: 800;
+      line-height: 1.15;
+      margin-bottom: 25px;
+      background: linear-gradient(135deg, #fff 40%, #c084fc 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      letter-spacing: -1px;
+    }
+
+    .hero-tagline {
+      font-size: 1.3rem;
+      color: var(--text-muted);
+      max-width: 750px;
+      margin: 0 auto 50px auto;
+      font-weight: 300;
+    }
+
+    /* One-liner Installation Frame */
+    .terminal-container {
+      max-width: 760px;
+      margin: 0 auto 120px auto;
+      background: var(--card-bg);
+      backdrop-filter: blur(20px);
+      border: 1px solid var(--border-color);
+      border-radius: 24px;
+      overflow: hidden;
+      box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6);
+    }
+
+    .terminal-header {
+      background: rgba(10, 8, 20, 0.6);
+      padding: 18px 25px;
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .terminal-dots {
+      display: flex;
+      gap: 8px;
+    }
+
+    .dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+    }
+    .dot.red { background: #ef4444; }
+    .dot.yellow { background: #eab308; }
+    .dot.green { background: #22c55e; }
+
+    .terminal-tabs {
+      display: flex;
+      gap: 12px;
+      background: rgba(255, 255, 255, 0.03);
+      padding: 4px;
+      border-radius: 8px;
+    }
+
+    .tab-btn {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      padding: 6px 14px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: 600;
+      font-size: 0.8rem;
+      transition: all 0.2s ease;
+      font-family: inherit;
+    }
+
+    .tab-btn.active {
+      color: #fff;
+      background: rgba(168, 85, 247, 0.2);
+      border: 1px solid rgba(168, 85, 247, 0.2);
+    }
+
+    .terminal-body {
+      padding: 30px 40px;
+      font-family: 'Courier New', Courier, monospace;
+      font-size: 1.05rem;
+      text-align: left;
+      position: relative;
+    }
+
+    .term-comment {
+      color: #64748b;
+      margin-bottom: 12px;
+    }
+
+    .term-line {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      color: #38bdf8;
+    }
+
+    .btn-copy {
+      position: absolute;
+      right: 40px;
+      top: 50%;
+      transform: translateY(-50%);
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border-color);
+      color: var(--text-muted);
+      padding: 8px 16px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 0.8rem;
+      font-weight: 500;
+      font-family: inherit;
+      transition: all 0.2s ease;
+    }
+
+    .btn-copy:hover {
+      background: rgba(255, 255, 255, 0.1);
+      color: #fff;
+    }
+
+    /* Live Interactive Chat Sandbox */
+    .demo-section {
+      max-width: 1200px;
+      margin: 0 auto 120px auto;
+      padding: 0 20px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 60px;
+      align-items: center;
+    }
+
+    .demo-info h2 {
+      font-size: 2.5rem;
+      font-weight: 800;
+      margin-bottom: 20px;
+      line-height: 1.2;
+    }
+
+    .demo-info p {
+      color: var(--text-muted);
+      font-size: 1.1rem;
+      margin-bottom: 30px;
+      line-height: 1.7;
+    }
+
+    .demo-features {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+    }
+
+    .demo-feature-item {
+      display: flex;
+      align-items: center;
+      gap: 15px;
+      font-size: 1.05rem;
+      font-weight: 500;
+    }
+
+    .demo-feature-item svg {
+      width: 22px;
+      height: 22px;
+      fill: var(--accent-purple);
+    }
+
+    .chat-sandbox {
+      background: rgba(13, 9, 31, 0.6);
+      backdrop-filter: blur(20px);
+      border: 1px solid var(--border-color);
+      border-radius: 24px;
+      height: 520px;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .sandbox-header {
+      padding: 20px;
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      gap: 15px;
+      background: rgba(0, 0, 0, 0.2);
+    }
+
+    .sandbox-indicator {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #10b981;
+      box-shadow: 0 0 10px #10b981;
+    }
+
+    .sandbox-chat-area {
+      flex: 1;
+      padding: 20px 25px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+    }
+
+    .sandbox-msg {
+      max-width: 80%;
+      padding: 12px 18px;
+      border-radius: 16px;
+      font-size: 0.95rem;
+      line-height: 1.45;
+      animation: fadeInUp 0.3s ease;
+    }
+
+    .sandbox-msg.assistant {
+      background: rgba(255, 255, 255, 0.04);
+      color: #e2e8f0;
+      align-self: flex-start;
+      border-bottom-left-radius: 3px;
+      border: 1px solid rgba(255, 255, 255, 0.03);
+    }
+
+    .sandbox-msg.user {
+      background: linear-gradient(135deg, #a855f7 0%, #3b82f6 100%);
+      color: #fff;
+      align-self: flex-end;
+      border-bottom-right-radius: 3px;
+    }
+
+    .sandbox-footer {
+      padding: 15px 20px;
+      border-top: 1px solid var(--border-color);
+      display: flex;
+      gap: 12px;
+      background: rgba(0, 0, 0, 0.2);
+    }
+
+    .sandbox-input {
+      flex: 1;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 12px;
+      padding: 14px 18px;
+      color: #fff;
+      outline: none;
+      font-size: 0.95rem;
+      font-family: inherit;
+    }
+
+    .sandbox-input:focus {
+      border-color: var(--accent-purple);
+    }
+
+    .sandbox-send {
+      background: var(--accent-purple);
+      border: none;
+      color: #fff;
+      padding: 0 20px;
+      border-radius: 12px;
+      cursor: pointer;
+      font-weight: 600;
+      font-family: inherit;
+    }
+
+    /* Features Grid */
+    .features-section {
+      max-width: 1200px;
+      margin: 0 auto 120px auto;
+      padding: 0 20px;
+    }
+
+    .section-title {
+      text-align: center;
+      font-size: 2.5rem;
+      font-weight: 800;
+      margin-bottom: 60px;
+    }
+
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 30px;
+    }
+
+    .feature-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 24px;
+      padding: 40px;
+      transition: all 0.3s ease;
+    }
+
+    .feature-card:hover {
+      transform: translateY(-5px);
+      border-color: rgba(168, 85, 247, 0.2);
+    }
+
+    .feature-icon {
+      width: 50px;
+      height: 50px;
+      border-radius: 12px;
+      background: rgba(168, 85, 247, 0.15);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.4rem;
+      margin-bottom: 25px;
+      color: var(--accent-purple);
+      border: 1px solid rgba(168, 85, 247, 0.2);
+    }
+
+    .feature-card h3 {
+      font-size: 1.3rem;
+      margin-bottom: 12px;
+      font-weight: 700;
+    }
+
+    .feature-card p {
+      color: var(--text-muted);
+      font-size: 0.95rem;
+      line-height: 1.6;
+    }
+
+    /* Pricing Section */
+    .pricing-section {
+      max-width: 1200px;
+      margin: 0 auto 120px auto;
+      padding: 0 20px;
+      text-align: center;
+    }
+
+    .pricing-card {
+      max-width: 450px;
+      margin: 0 auto;
+      background: linear-gradient(135deg, rgba(20, 15, 38, 0.6) 0%, rgba(10, 8, 22, 0.8) 100%);
+      border: 1px solid rgba(168, 85, 247, 0.3);
+      box-shadow: 0 25px 60px rgba(168, 85, 247, 0.1);
+      border-radius: 24px;
+      padding: 50px 40px;
+      text-align: center;
+      position: relative;
+    }
+
+    .pricing-badge {
+      position: absolute;
+      top: -15px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--accent-purple);
+      color: #fff;
+      font-size: 0.8rem;
+      font-weight: 700;
+      padding: 6px 20px;
+      border-radius: 50px;
+      letter-spacing: 0.5px;
+    }
+
+    .price {
+      font-size: 3.5rem;
+      font-weight: 800;
+      margin: 20px 0 10px 0;
+      color: #fff;
+    }
+
+    .price-period {
+      font-size: 1rem;
+      color: var(--text-muted);
+      font-weight: 400;
+    }
+
+    .pricing-features {
+      list-style: none;
+      text-align: left;
+      margin: 40px 0;
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+    }
+
+    .pricing-features li {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 1rem;
+    }
+
+    .pricing-features li::before {
+      content: '✓';
+      color: #10b981;
+      font-weight: bold;
+    }
+
+    /* Footer */
+    footer {
+      border-top: 1px solid var(--border-color);
+      padding: 60px 20px;
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 0.9rem;
+    }
+
+    @keyframes fadeInUp {
+      from { opacity: 0; transform: translateY(15px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Floating Header -->
+  <header>
+    <div class="logo-container">
+      <div class="logo-symbol">+- NOVA -+</div>
+      <div class="logo-text">NOVA.ai</div>
+    </div>
+    <nav>
+      <a href="#install">Install</a>
+      <a href="#demo">Live Demo</a>
+      <a href="#features">Features</a>
+      <a href="#pricing">Pricing</a>
+    </nav>
+    <div class="header-actions">
+      <a href="/dashboard" class="btn-secondary">Console Login</a>
+      <a href="https://github.com/MithunVimalan/NOVA.ai" class="btn-primary">GitHub</a>
+    </div>
+  </header>
+
+  <!-- Hero Section -->
+  section class="hero">
+    <div class="hero-badge">Zero API Keys — 100% Local Run</div>
+    <h1>The Digital Coworker<br>That Obeys ONLY YOU.</h1>
+    <p class="hero-tagline">
+      NOVA is an open-source, local-first virtual assistant that executes real tasks on the machine it lives on. 
+      Runs shell commands, manages files, scrapes the web, and drives sales widgets — completely privately.
+    </p>
+
+    <!-- Installation Terminal -->
+    <div class="terminal-container" id="install">
+      <div class="terminal-header">
+        <div class="terminal-dots">
+          <div class="dot red"></div>
+          <div class="dot yellow"></div>
+          <div class="dot green"></div>
+        </div>
+        <div class="terminal-tabs">
+          <button class="tab-btn active" id="tab-btn-win" onclick="switchTab('win')">Windows</button>
+          <button class="tab-btn" id="tab-btn-unix" onclick="switchTab('unix')">macOS & Linux</button>
+        </div>
+        <div style="font-size: 0.75rem; color: var(--text-muted); font-family: monospace;">Powershell Console</div>
+      </div>
+      <div class="terminal-body">
+        <button class="btn-copy" onclick="copyCommand()">Copy</button>
+        
+        <div id="cmd-win">
+          <div class="term-comment"># Installs Node, Git, Ollama, compiles TS workspaces, and launches config wizard:</div>
+          <div class="term-line">
+            <span>></span>
+            <span id="text-win">powershell -c "irm https://raw.githubusercontent.com/MithunVimalan/NOVA.ai/main/install.ps1 | iex"</span>
+          </div>
+        </div>
+
+        <div id="cmd-unix" style="display: none;">
+          <div class="term-comment"># Installs Node, Git, Ollama, compiles TS workspaces, and launches config wizard:</div>
+          <div class="term-line">
+            <span>$</span>
+            <span id="text-unix">curl -fsSL https://raw.githubusercontent.com/MithunVimalan/NOVA.ai/main/install.sh | bash</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Live Sandbox Demo Section -->
+  <section class="demo-section" id="demo">
+    <div class="demo-info">
+      <h2>Interact with NOVA</h2>
+      <p>
+        Experience the task-execution engine. In this live sandbox, you can tell the virtual assistant to perform commands. 
+        All guest bash and scripting runs are isolated inside ephemeral Docker containers for absolute security.
+      </p>
+      <ul class="demo-features">
+        <li class="demo-feature-item">
+          <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>
+          100% Ephemeral Docker Container Sandboxing
+        </li>
+        <li class="demo-feature-item">
+          <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>
+          No Cloud Hooks — Pure Local Executions
+        </li>
+      </ul>
+    </div>
+    
+    <div class="chat-sandbox">
+      <div class="sandbox-header">
+        <div class="sandbox-indicator"></div>
+        <span style="font-weight: 600; font-size: 0.95rem;">NOVA Sandboxed Console</span>
+      </div>
+      <div class="sandbox-chat-area" id="sandbox-chat-list">
+        <div class="sandbox-msg assistant">
+          Hello! I am NOVA running inside this web sandbox page. You can ask me to run commands or write code (e.g. <i>"run whoami"</i>, or <i>"write javascript code to sum 5+10"</i>).
+        </div>
+      </div>
+      <div class="sandbox-footer">
+        <input type="text" class="sandbox-input" id="sandbox-chat-input" placeholder="Type a sandboxed command..." autocomplete="off" />
+        <button class="sandbox-send" onclick="sendSandboxMessage()">Send</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Core Features Section -->
+  <section class="features-section" id="features">
+    <h2 class="section-title">Engine Features</h2>
+    <div class="features-grid">
+      <div class="feature-card">
+        <div class="feature-icon">🔒</div>
+        <h3>Docker-Based Sandboxing</h3>
+        <p>Guest sessions and visitor widgets are forced into restricted Docker container runtimes (network blocked, CPU/Memory caps) to protect your host OS.</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">🛠️</div>
+        <h3>Real Host Tool execution</h3>
+        <p>Run bash, read/edit files, scrape websites via headless Chromium, and send SMTP emails automatically on your command.</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">🔌</div>
+        <h3>Self-Writing Skills</h3>
+        <p>Hot-reloads new skills written in Markdown mid-conversation. You can instruct NOVA to write its own plugins and load them instantly.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Pricing Section -->
+  <section class="pricing-section" id="pricing">
+    <h2 class="section-title">Simple Subscription Plan</h2>
+    <div class="pricing-card">
+      <div class="pricing-badge">SaaS Ready</div>
+      <h3>NOVA Pro Client</h3>
+      <div class="price">$7<span class="price-period">/month per client</span></div>
+      <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 20px;">For developers and companies wanting priority support and SaaS widget features.</p>
+      <ul class="pricing-features">
+        <li>Unlimited Local Tasks Execution</li>
+        <li>Unlimited SQLite Factual Memory profiles</li>
+        <li>WhatsApp & Telegram bot configurations</li>
+        <li>NOVA Engage website tracking & leads widget</li>
+        <li>Full Docker Sandbox integrations</li>
+      </ul>
+      <a href="/dashboard" class="btn-primary" style="display: block; width: 100%; text-align: center;">Get Started Console</a>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer>
+    <p>© 2026 NOVA.ai. Created by Mithunvimalan SA. All Rights Reserved.</p>
+  </footer>
+
+  <script>
+    let activeTab = 'win';
+
+    function switchTab(tab) {
+      activeTab = tab;
+      document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+      document.getElementById('tab-btn-' + tab).classList.add('active');
+
+      if (tab === 'win') {
+        document.getElementById('cmd-win').style.display = 'block';
+        document.getElementById('cmd-unix').style.display = 'none';
+      } else {
+        document.getElementById('cmd-win').style.display = 'none';
+        document.getElementById('cmd-unix').style.display = 'block';
+      }
+    }
+
+    function copyCommand() {
+      const textId = 'text-' + activeTab;
+      const cmdText = document.getElementById(textId).innerText;
+      navigator.clipboard.writeText(cmdText).then(() => {
+        const copyBtn = document.querySelector('.btn-copy');
+        copyBtn.innerText = 'Copied!';
+        setTimeout(() => copyBtn.innerText = 'Copy', 2000);
+      });
+    }
+
+    // SIMULATED SANDBOX CHAT LOGIC FOR DEMO
+    function sendSandboxMessage() {
+      const inputEl = document.getElementById('sandbox-chat-input');
+      const val = inputEl.value.trim();
+      if (!val) return;
+
+      appendSandboxMessage('user', val);
+      inputEl.value = '';
+
+      // Mock typing indicator
+      const typing = document.createElement('div');
+      typing.className = 'sandbox-msg assistant';
+      typing.textContent = 'NOVA is compiling/routing task...';
+      const chatList = document.getElementById('sandbox-chat-list');
+      chatList.appendChild(typing);
+      chatList.scrollTop = chatList.scrollHeight;
+
+      setTimeout(() => {
+        typing.remove();
+        
+        let response = '';
+        const norm = val.toLowerCase();
+        
+        if (norm.includes('whoami')) {
+          response = `[Sandboxed Run] Stdout:\nsandbox-user-176\nStderr:\n`;
+        } else if (norm.includes('run') || norm.includes('bash') || norm.includes('ls') || norm.includes('dir')) {
+          response = `[Sandboxed Run] Stdout:\nsrc/\npackage.json\ndist/\n\nStderr:\n`;
+        } else if (norm.includes('code') || norm.includes('javascript') || norm.includes('sum')) {
+          response = `[Sandboxed Run] Stdout:\n15\nStderr:\n`;
+        } else {
+          response = `I have received your request "${val}". Since this is the public demo site, I evaluated it inside an isolated alpine sandbox container. Let me know if you would like me to compile a specific script!`;
+        }
+        
+        appendSandboxMessage('assistant', response);
+      }, 1500);
+    }
+
+    function appendSandboxMessage(sender, text) {
+      const msg = document.createElement('div');
+      msg.className = 'sandbox-msg ' + sender;
+      msg.innerHTML = text.replace(/\n/g, '<br/>');
+      const chatList = document.getElementById('sandbox-chat-list');
+      chatList.appendChild(msg);
+      chatList.scrollTop = chatList.scrollHeight;
+    }
+
+    document.getElementById('sandbox-chat-input').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') sendSandboxMessage();
+    });
+  </script>
+</body>
+</html>

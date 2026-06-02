@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NOVA — The Local AI Assistant That Actually Does Things</title>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-color: #06040a;
+      --accent-purple: #a855f7;
+      --accent-blue: #3b82f6;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --card-bg: rgba(20, 15, 38, 0.4);
+      --border-color: rgba(255, 255, 255, 0.08);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Outfit', sans-serif;
+      background-color: var(--bg-color);
+      background-image: 
+        radial-gradient(at 0% 0%, rgba(168, 85, 247, 0.15) 0px, transparent 40%),
+        radial-gradient(at 100% 100%, rgba(59, 130, 246, 0.15) 0px, transparent 40%);
+      color: var(--text-main);
+      overflow-x: hidden;
+      line-height: 1.5;
+    }
+
+    header {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 30px 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .logo-box {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .logo-symbol {
+      font-family: monospace;
+      border: 1px dashed rgba(168, 85, 247, 0.5);
+      padding: 6px 12px;
+      border-radius: 6px;
+      color: var(--accent-purple);
+      font-size: 0.9rem;
+      background: rgba(0,0,0,0.3);
+    }
+
+    .logo-text {
+      font-size: 1.5rem;
+      font-weight: 700;
+      background: linear-gradient(90deg, #a855f7, #3b82f6);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      letter-spacing: 1px;
+    }
+
+    nav {
+      display: flex;
+      gap: 30px;
+    }
+
+    nav a {
+      color: var(--text-muted);
+      text-decoration: none;
+      font-weight: 500;
+      transition: color 0.3s ease;
+    }
+
+    nav a:hover {
+      color: #fff;
+    }
+
+    .btn-github {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border-color);
+      color: #fff;
+      padding: 8px 20px;
+      border-radius: 50px;
+      text-decoration: none;
+      font-weight: 600;
+      transition: all 0.3s ease;
+    }
+
+    .btn-github:hover {
+      background: rgba(255, 255, 255, 0.1);
+    }
+
+    /* Hero Section */
+    .hero {
+      max-width: 900px;
+      margin: 80px auto;
+      text-align: center;
+      padding: 0 20px;
+    }
+
+    .badge-promo {
+      background: rgba(168, 85, 247, 0.15);
+      border: 1px solid var(--accent-purple);
+      color: #d8b4fe;
+      padding: 6px 18px;
+      border-radius: 50px;
+      display: inline-block;
+      font-size: 0.9rem;
+      font-weight: 500;
+      margin-bottom: 25px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    h1 {
+      font-size: 3.5rem;
+      font-weight: 700;
+      line-height: 1.2;
+      margin-bottom: 20px;
+      background: linear-gradient(135deg, #fff 40%, #c084fc 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .tagline {
+      font-size: 1.3rem;
+      color: var(--text-muted);
+      max-width: 700px;
+      margin: 0 auto 40px auto;
+      font-weight: 300;
+    }
+
+    /* Quick Start Terminal Box */
+    .quick-start {
+      max-width: 750px;
+      margin: 0 auto 100px auto;
+      background: var(--card-bg);
+      backdrop-filter: blur(16px);
+      border: 1px solid var(--border-color);
+      border-radius: 20px;
+      overflow: hidden;
+      box-shadow: 0 30px 60px rgba(0, 0, 0, 0.4);
+    }
+
+    .terminal-header {
+      padding: 15px 25px;
+      background: rgba(0,0,0,0.3);
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .tabs {
+      display: flex;
+      gap: 15px;
+    }
+
+    .tab-btn {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      font-weight: 600;
+      font-size: 0.85rem;
+      cursor: pointer;
+      padding: 4px 8px;
+      border-radius: 4px;
+      transition: all 0.2s ease;
+    }
+
+    .tab-btn.active {
+      color: var(--accent-purple);
+      background: rgba(168, 85, 247, 0.1);
+    }
+
+    .terminal-body {
+      padding: 30px;
+      text-align: left;
+      font-family: monospace;
+      font-size: 1rem;
+      position: relative;
+    }
+
+    .comment {
+      color: var(--text-muted);
+      margin-bottom: 10px;
+    }
+
+    .cmd-line {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: #38bdf8;
+    }
+
+    .btn-copy {
+      position: absolute;
+      right: 30px;
+      top: 50%;
+      transform: translateY(-50%);
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border-color);
+      color: var(--text-muted);
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-family: inherit;
+      font-size: 0.8rem;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .btn-copy:hover {
+      background: rgba(255, 255, 255, 0.1);
+      color: #fff;
+    }
+
+    /* Features Grid */
+    .features {
+      max-width: 1100px;
+      margin: 0 auto 100px auto;
+      padding: 0 20px;
+    }
+
+    .section-title {
+      text-align: center;
+      font-size: 2rem;
+      font-weight: 700;
+      margin-bottom: 50px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 30px;
+    }
+
+    .feature-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 20px;
+      padding: 30px;
+      transition: transform 0.3s ease;
+    }
+
+    .feature-card:hover {
+      transform: translateY(-5px);
+    }
+
+    .card-icon {
+      width: 44px;
+      height: 44px;
+      border-radius: 10px;
+      background: rgba(168, 85, 247, 0.15);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.2rem;
+      color: var(--accent-purple);
+      margin-bottom: 20px;
+    }
+
+    .feature-card h3 {
+      font-size: 1.2rem;
+      margin-bottom: 10px;
+    }
+
+    .feature-card p {
+      color: var(--text-muted);
+      font-size: 0.95rem;
+      line-height: 1.6;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="logo-box">
+      <div class="logo-symbol">+- NOVA -+</div>
+      <div class="logo-text">NOVA.ai</div>
+    </div>
+    <nav>
+      <a href="#features">Features</a>
+      <a href="#install">Install</a>
+      <a href="https://github.com/MithunVimalan/NOVA.ai">Docs</a>
+    </nav>
+    <a href="https://github.com/MithunVimalan/NOVA.ai" class="btn-github">GitHub</a>
+  </header>
+
+  <section class="hero">
+    <span class="badge-promo">Zero-API-Key Personal Assistant</span>
+    <h1>The Local AI Assistant<br>That Obey Only You.</h1>
+    <p class="tagline">Clears your inbox, runs terminal command lines, coordinates schedules, and tracks website visitors. 100% locally hosted. Your data never leaves your computer.</p>
+
+    <!-- Quick Start Terminal -->
+    <div class="quick-start" id="install">
+      <div class="terminal-header">
+        <div class="tabs">
+          <button class="tab-btn active" id="tab-win" onclick="switchTab('win')">Windows</button>
+          <button class="tab-btn" id="tab-unix" onclick="switchTab('unix')">macOS & Linux</button>
+        </div>
+        <div style="font-size: 0.8rem; color: var(--text-muted);">Quick Start One-Liner</div>
+      </div>
+      <div class="terminal-body">
+        <button class="btn-copy" onclick="copyCommand()">Copy</button>
+        
+        <div id="cmd-win">
+          <div class="comment"># Installs Node.js, Git, Ollama, compiles packages, and starts onboarding:</div>
+          <div class="cmd-line">
+            <span>$</span>
+            <span id="text-win">powershell -c "irm https://raw.githubusercontent.com/MithunVimalan/NOVA.ai/main/install.ps1 | iex"</span>
+          </div>
+        </div>
+
+        <div id="cmd-unix" style="display: none;">
+          <div class="comment"># Installs system runtimes, pulls models, compiles workspace, and onboarding:</div>
+          <div class="cmd-line">
+            <span>$</span>
+            <span id="text-unix">curl -fsSL https://raw.githubusercontent.com/MithunVimalan/NOVA.ai/main/install.sh | bash</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="features" id="features">
+    <h2 class="section-title">Why Deploy NOVA?</h2>
+    
+    <div class="grid">
+      <div class="feature-card">
+        <div class="card-icon">🔐</div>
+        <h3>100% Local Privacy</h3>
+        <p>No connections to OpenAI, Anthropic, or external clouds. Runs locally on your laptop, home server, or Raspberry Pi using Ollama.</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="card-icon">⚡</div>
+        <h3>Host Command execution</h3>
+        <p>Manage files, run shell commands, write python scripts, and browse webpages securely. Complete system access under your command.</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="card-icon">📈</div>
+        <h3>NOVA Engage Widget</h3>
+        <p>Automatically tracks website visitor timelines, scroll depths, and exit intent behaviors. Proactively converts visitors into buyers using local RAG.</p>
+      </div>
+    </div>
+  </section>
+
+  <script>
+    let activeTab = 'win';
+
+    function switchTab(tab) {
+      activeTab = tab;
+      document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+      document.getElementById('tab-' + tab).classList.add('active');
+
+      if (tab === 'win') {
+        document.getElementById('cmd-win').style.display = 'block';
+        document.getElementById('cmd-unix').style.display = 'none';
+      } else {
+        document.getElementById('cmd-win').style.display = 'none';
+        document.getElementById('cmd-unix').style.display = 'block';
+      }
+    }
+
+    function copyCommand() {
+      const textId = 'text-' + activeTab;
+      const cmdText = document.getElementById(textId).innerText;
+      navigator.clipboard.writeText(cmdText).then(() => {
+        const copyBtn = document.querySelector('.btn-copy');
+        copyBtn.innerText = 'Copied!';
+        setTimeout(() => copyBtn.innerText = 'Copy', 2000);
+      });
+    }
+  </script>
+</body>
+</html>
