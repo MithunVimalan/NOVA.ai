@@ -262,13 +262,15 @@ async function main() {
     `;
   });
 
-  fastify.get('/dashboard', async (request, reply) => {
+  const serveDashboard = async (request: any, reply: any) => {
     const dashboardHtml = path.join(publicDir, 'dashboard.html');
     if (fs.existsSync(dashboardHtml)) {
       return reply.sendFile('dashboard.html');
     }
     reply.status(404).send({ error: 'Dashboard file not found' });
-  });
+  };
+  fastify.get('/dashboard', serveDashboard);
+  fastify.get('/dashboard.html', serveDashboard);
 
   // Start Server
   try {

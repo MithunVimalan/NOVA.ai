@@ -176,6 +176,17 @@
       box-shadow: 0 0 10px #10b981;
     }
 
+    .server-status.offline {
+      background: rgba(239, 68, 68, 0.1);
+      border-color: rgba(239, 68, 68, 0.2);
+      color: #f87171;
+    }
+
+    .server-status.offline::before {
+      background: #ef4444;
+      box-shadow: 0 0 10px #ef4444;
+    }
+
     /* App Views */
     .view-container {
       flex: 1;
@@ -493,7 +504,7 @@
   <div class="main-content">
     <div class="topbar">
       <div class="page-title" id="page-title-header">Chat Console</div>
-      <div class="server-status">Gateway Server Active</div>
+      <div class="server-status" id="gateway-status">Gateway Server Active</div>
     </div>
 
     <!-- VIEW: CHAT CONSOLE -->
@@ -795,6 +806,39 @@
 
       alert('Configuration payload updated successfully! Configurations will reflect in subsequent system operations.');
     }
+
+    async function checkServerConnection() {
+      const statusEl = document.getElementById('gateway-status');
+      try {
+        const res = await fetch('/api/skills');
+        if (res.ok) {
+          statusEl.textContent = 'Gateway Server Active';
+          statusEl.classList.remove('offline');
+        } else {
+          throw new Error('Not ok');
+        }
+      } catch (err) {
+        statusEl.textContent = 'Gateway Offline (Demo Mode)';
+        statusEl.classList.add('offline');
+        
+        // Add a notice message to the chat
+        const container = document.getElementById('chat-messages-container');
+        const warningMsg = document.createElement('div');
+        warningMsg.className = 'message assistant';
+        warningMsg.style.borderColor = 'rgba(239, 68, 68, 0.3)';
+        warningMsg.style.background = 'rgba(239, 68, 68, 0.05)';
+        warningMsg.innerHTML = `⚠️ <b>Gateway Connection Failed:</b> Could not connect to the local server.<br/><br/>
+        If you are running NOVA locally, ensure the server is active (default port 3000).<br/>
+        Otherwise, you are viewing this in <b>Static Demo Mode</b>. To install and run NOVA on your own machine, follow the instructions on the <a href="index.html" style="color: #a855f7; text-decoration: underline;">Landing Page</a>.`;
+        container.appendChild(warningMsg);
+        container.scrollTop = container.scrollHeight;
+      }
+    }
+    
+    // Call on load
+    window.addEventListener('DOMContentLoaded', () => {
+      checkServerConnection();
+    });
   </script>
 </body>
 </html>
