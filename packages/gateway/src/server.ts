@@ -8,6 +8,7 @@ import { getCrmService } from './services/crm.js';
 import { getRateLimiter } from './services/limiter.js';
 import { generateJwt, verifyJwt } from './services/auth.js';
 import { computeAnalyticsOverview } from './services/analytics.js';
+import { getSecureLogger } from './services/logger.js';
 import { Telegraf } from 'telegraf';
 import path from 'node:path';
 import fs from 'node:fs';
@@ -26,6 +27,17 @@ async function main() {
   await fastify.register(cors, {
     origin: '*',
   });
+
+  // Register security headers (Helmet fallback)
+  fastify.addHook('onRequest', async (request, reply) => {
+    reply.header('Content-Security-Policy', "default-src 'self'");
+    reply.header('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+    reply.header('X-Frame-Options', 'DENY');
+    reply.header('X-Content-Type-Options', 'nosniff');
+    reply.header('Referrer-Policy', 'no-referrer');
+  });
+
+  const secureLogger = getSecureLogger();
 
   // Register WebSockets
   await fastify.register(fastifyWebsocket);
@@ -154,11 +166,13 @@ async function main() {
   fastify.get('/api/analytics/overview', async (request: any, reply) => {
     const authHeader = request.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      secureLogger.warn('Authorization failure: Missing or invalid token format', { headers: request.headers });
       return reply.status(401).send({ error: 'Unauthorized: Missing or invalid authorization token' });
     }
     const token = authHeader.split(' ')[1];
     const decoded = verifyJwt(token);
     if (!decoded || decoded.role !== 'owner') {
+      secureLogger.warn('Authorization failure: Expired or invalid signature token', { token });
       return reply.status(401).send({ error: 'Unauthorized: Access token is invalid or expired' });
     }
 

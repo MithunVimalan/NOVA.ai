@@ -68,3 +68,34 @@ export function verifyJwt(token: string): any {
     return null;
   }
 }
+
+/**
+ * Hashes a password using Node's crypto scrypt algorithm with a random salt
+ */
+export async function hashPassword(password: string): Promise<string> {
+  const salt = crypto.randomBytes(16).toString('hex');
+  return new Promise((resolve, reject) => {
+    crypto.scrypt(password, salt, 64, (err, derivedKey) => {
+      if (err) reject(err);
+      resolve(`${salt}:${derivedKey.toString('hex')}`);
+    });
+  });
+}
+
+/**
+ * Verifies a password against a scrypt-derived hash
+ */
+export async function verifyPassword(password: string, hash: string): Promise<boolean> {
+  try {
+    const [salt, key] = hash.split(':');
+    if (!salt || !key) return false;
+    return new Promise((resolve) => {
+      crypto.scrypt(password, salt, 64, (err, derivedKey) => {
+        if (err) resolve(false);
+        resolve(derivedKey.toString('hex') === key);
+      });
+    });
+  } catch {
+    return false;
+  }
+}
