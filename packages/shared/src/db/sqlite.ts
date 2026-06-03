@@ -36,6 +36,14 @@ export interface Tenant {
   stripeStatus: string;
 }
 
+export interface SalesLog {
+  id?: number;
+  productId: string;
+  revenue: number;
+  customer: string;
+  timestamp: string;
+}
+
 export class SqliteManager {
   private memoryPath: string;
   private dbPath: string;
@@ -48,7 +56,8 @@ export class SqliteManager {
     visitors: VisitorEvent[];
     leads: Lead[];
     tenants: Tenant[];
-  } = { facts: {}, visitors: [], leads: [], tenants: [] };
+    sales: SalesLog[];
+  } = { facts: {}, visitors: [], leads: [], tenants: [], sales: [] };
 
   constructor() {
     const config = loadConfig();
@@ -112,6 +121,13 @@ export class SqliteManager {
         whatsapp_token TEXT,
         stripe_status TEXT DEFAULT 'active'
       );
+      CREATE TABLE IF NOT EXISTS sales_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        product_id TEXT,
+        revenue REAL,
+        customer TEXT,
+        timestamp TEXT
+      );
     `);
   }
 
@@ -125,6 +141,7 @@ export class SqliteManager {
         if (!this.cache.visitors) this.cache.visitors = [];
         if (!this.cache.leads) this.cache.leads = [];
         if (!this.cache.tenants) this.cache.tenants = [];
+        if (!this.cache.sales) this.cache.sales = [];
       } catch (err) {
         console.error(`[Database] Error reading fallback DB file, resetting:`, err);
       }
@@ -354,6 +371,52 @@ export class SqliteManager {
         }));
       } catch (e) {
         console.error(`[Database] getAllTenants failed:`, e);
+        return [];
+      }
+    }
+  }
+
+  // SALES TRACKING OPERATIONS
+  public logSale(sale: Omit<SalesLog, 'timestamp'> & { timestamp?: string }): void {
+    const timestamp = sale.timestamp || new Date().toISOString();
+    if (this.isFallback) {
+      this.cache.sales = this.cache.sales || [];
+      const newSale: SalesLog = {
+        id: this.cache.sales.length + 1,
+        ...sale,
+        timestamp,
+      };
+      this.cache.sales.push(newSale);
+      this.saveFallbackData();
+    } else {
+      try {
+        const stmt = this.dbInstance.prepare(`
+          INSERT INTO sales_logs (product_id, revenue, customer, timestamp)
+          VALUES (?, ?, ?, ?)
+        `);
+        stmt.run(sale.productId, sale.revenue, sale.customer, timestamp);
+      } catch (e) {
+        console.error(`[Database] logSale failed:`, e);
+      }
+    }
+  }
+
+  public getSalesLogs(): SalesLog[] {
+    if (this.isFallback) {
+      return [...(this.cache.sales || [])].reverse();
+    } else {
+      try {
+        const stmt = this.dbInstance.prepare('SELECT * FROM sales_logs ORDER BY timestamp DESC');
+        const rows = stmt.all() as any[];
+        return rows.map(r => ({
+          id: r.id,
+          productId: r.product_id,
+          revenue: r.revenue,
+          customer: r.customer,
+          timestamp: r.timestamp,
+        }));
+      } catch (e) {
+        console.error(`[Database] getSalesLogs failed:`, e);
         return [];
       }
     }

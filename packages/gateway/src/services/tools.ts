@@ -89,6 +89,13 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
       skillName: { type: 'string', description: 'Filename of the skill (e.g. system-monitor)' },
       markdownContent: { type: 'string', description: 'Markdown definition containing triggers, description, and logic' }
     }
+  },
+  {
+    name: 'business_analytics_report',
+    description: 'Get a summarized business analytics report, including sales trends, visitor counts, conversion rates, and top-selling products. (Owner only)',
+    parameters: {
+      period: { type: 'string', enum: ['today', 'weekly', 'monthly', 'yearly'], default: 'today', description: 'The time period for the report' }
+    }
   }
 ];
 
@@ -122,7 +129,7 @@ export async function executeTool(
   context: ToolContext
 ): Promise<{ success: boolean; output: string }> {
   // Security Sandbox Check - Critical Blockers
-  const requiresOwnerOnly = ['file_write', 'browser', 'skill_write'];
+  const requiresOwnerOnly = ['file_write', 'browser', 'skill_write', 'business_analytics_report'];
   if (requiresOwnerOnly.includes(toolName) && !context.isOwner) {
     return {
       success: false,
@@ -351,6 +358,32 @@ export async function executeTool(
           success: true,
           output: `Skill "${args.skillName}" written to ${fullPath}. Hot reload will register the new commands automatically.`
         };
+      }
+
+      case 'business_analytics_report': {
+        const { computeAnalyticsOverview } = await import('./analytics.js');
+        const overview = computeAnalyticsOverview();
+        const period = args.period || 'today';
+        
+        let salesStats = { revenue: 0, count: 0 };
+        if (period === 'today') salesStats = overview.salesTrends.today;
+        else if (period === 'weekly') salesStats = overview.salesTrends.weekly;
+        else if (period === 'monthly') salesStats = overview.salesTrends.monthly;
+        else if (period === 'yearly') salesStats = overview.salesTrends.yearly;
+        
+        const summary = `--- Business Analytics Report (${period.toUpperCase()}) ---
+Revenue: $${salesStats.revenue.toFixed(2)}
+Sales Count: ${salesStats.count}
+Total Visits: ${overview.visitors.totalVisits}
+Unique Visitors: ${overview.visitors.uniqueVisitors}
+Bounce Rate: ${overview.visitors.bounceRate}%
+Average Session Length: ${overview.visitors.avgSessionLength} seconds
+New Visitors: ${overview.visitors.newVisitors}
+Returning Visitors: ${overview.visitors.returningVisitors}
+Top Products by Conversions:
+${overview.products.slice(0, 5).map((p, i) => `${i+1}. Product ID: ${p.productId} - Conversions: ${p.conversions}, Views: ${p.views}, Conv. Rate: ${p.conversionRate}%`).join('\n') || 'No product data available.'}`;
+        
+        return { success: true, output: summary };
       }
 
       default:

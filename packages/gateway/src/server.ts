@@ -7,6 +7,7 @@ import { getQueueService } from './services/queue.js';
 import { getCrmService } from './services/crm.js';
 import { getRateLimiter } from './services/limiter.js';
 import { generateJwt, verifyJwt } from './services/auth.js';
+import { computeAnalyticsOverview } from './services/analytics.js';
 import { Telegraf } from 'telegraf';
 import path from 'node:path';
 import fs from 'node:fs';
@@ -147,6 +148,42 @@ async function main() {
       logs: logs.slice(0, 50),
       leads,
     };
+  });
+
+  // API Route: Get Business Analytics overview (secured with JWT)
+  fastify.get('/api/analytics/overview', async (request: any, reply) => {
+    const authHeader = request.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return reply.status(401).send({ error: 'Unauthorized: Missing or invalid authorization token' });
+    }
+    const token = authHeader.split(' ')[1];
+    const decoded = verifyJwt(token);
+    if (!decoded || decoded.role !== 'owner') {
+      return reply.status(401).send({ error: 'Unauthorized: Access token is invalid or expired' });
+    }
+
+    try {
+      const overview = computeAnalyticsOverview();
+      return overview;
+    } catch (err: any) {
+      return reply.status(500).send({ error: `Failed to compute analytics: ${err.message}` });
+    }
+  });
+
+  // API Route: Record manual sale
+  fastify.post('/api/analytics/sales', async (request: any, reply) => {
+    const { productId, revenue, customer } = request.body || {};
+    if (!productId || revenue === undefined || !customer) {
+      return reply.status(400).send({ error: 'productId, revenue, and customer are required' });
+    }
+
+    sqliteDb.logSale({
+      productId,
+      revenue: Number(revenue),
+      customer,
+    });
+
+    return { success: true };
   });
 
   // API Route: List loaded Skills

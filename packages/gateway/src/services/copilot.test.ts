@@ -6,7 +6,11 @@ import os from 'node:os';
 
 // TDD Test: Tauri 2 Desktop Config Validation
 test('Tauri 2 Config exists and has valid auto-start and tray settings', async () => {
-  const desktopDir = path.join(process.cwd(), 'apps', 'desktop');
+  let rootDir = process.cwd();
+  while (!fs.existsSync(path.join(rootDir, 'apps', 'desktop')) && path.dirname(rootDir) !== rootDir) {
+    rootDir = path.dirname(rootDir);
+  }
+  const desktopDir = path.join(rootDir, 'apps', 'desktop');
   const tauriConfigPath = path.join(desktopDir, 'src-tauri', 'tauri.conf.json');
 
   // Verify file existence
