@@ -41,7 +41,7 @@ export class SessionManager {
     sessionId: string,
     messageText: string,
     isOwner: boolean = false,
-    channelType: 'telegram' | 'whatsapp' | 'web' | 'widget' | 'voice' = 'web'
+    channelType: 'telegram' | 'whatsapp' | 'web' | 'widget' | 'voice' | 'instagram' = 'web'
   ): Promise<string> {
     const session = this.getOrCreateSession(sessionId, isOwner);
     
@@ -70,7 +70,7 @@ export class SessionManager {
 
     // 2. Fetch business RAG catalog context (for widget customer bots)
     let catalogString = '';
-    if (channelType === 'widget' || channelType === 'whatsapp' || channelType === 'telegram' || channelType === 'voice') {
+    if (channelType === 'widget' || channelType === 'whatsapp' || channelType === 'telegram' || channelType === 'voice' || channelType === 'instagram') {
       const catalogMatches = await vectorDb.searchCatalog(messageText, 3);
       if (catalogMatches.length > 0) {
         catalogString = `Relevant Business Documents & Catalog Context:\n` +

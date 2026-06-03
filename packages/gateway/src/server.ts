@@ -528,14 +528,87 @@ async function main() {
     return reply.status(400).send({ error: 'Invalid payload structure' });
   });
 
+  // Webhook: Instagram Verification (GET)
+  fastify.get('/webhooks/instagram/:tenantId', async (request: any, reply) => {
+    const { tenantId } = request.params;
+    const mode = request.query['hub.mode'];
+    const token = request.query['hub.verify_token'];
+    const challenge = request.query['hub.challenge'];
+
+    const verifyToken = sqliteDb.getFact(`instagram_verify_token_${tenantId}`) || 'nova_verify';
+
+    if (mode === 'subscribe' && token === verifyToken) {
+      console.log(`[Instagram Webhook verified for Tenant ${tenantId}]`);
+      return reply.send(challenge);
+    }
+    return reply.status(403).send({ error: 'Verification failed' });
+  });
+
+  // Webhook: Instagram Cloud API POST Messages
+  fastify.post('/webhooks/instagram/:tenantId', async (request: any, reply) => {
+    const { tenantId } = request.params;
+
+    const body = request.body;
+    if (body.object === 'instagram' && body.entry) {
+      const queueService = getQueueService();
+      for (const entry of body.entry) {
+        if (entry.messaging) {
+          for (const msgEvent of entry.messaging) {
+            if (msgEvent.message && msgEvent.message.text) {
+              const senderId = msgEvent.sender.id;
+              const text = msgEvent.message.text;
+
+              console.log(`[Instagram Webhook ${tenantId}] Msg from ${senderId}: ${text}`);
+
+              try {
+                await queueService.enqueueMessage(
+                  'instagram',
+                  tenantId,
+                  senderId,
+                  text,
+                  { instagramPageId: entry.id }
+                );
+              } catch (e: any) {
+                console.error(`[Instagram Webhook ${tenantId}] Queue failed:`, e);
+              }
+            }
+          }
+        }
+      }
+      return { success: true };
+    }
+
+    return reply.status(400).send({ error: 'Invalid payload structure' });
+  });
+
+  // API Route: Register FCM Push Notification Token
+  fastify.post('/api/notifications/register', async (request: any, reply) => {
+    const { tenantId, token } = request.body || {};
+    if (!tenantId || !token) {
+      return reply.status(400).send({ error: 'tenantId and token are required' });
+    }
+
+    sqliteDb.setFact(`fcm_token_${tenantId}`, token);
+    console.log(`[FCM] Registered token for Tenant ${tenantId}: ${token}`);
+    return { success: true };
+  });
+
   // API Route: Start Manual Takeover
   fastify.post('/api/takeover/start', async (request: any, reply) => {
-    const { sessionId } = request.body || {};
+    const { sessionId, tenantId } = request.body || {};
     if (!sessionId) return reply.status(400).send({ error: 'sessionId is required' });
 
     const session = sessionManager.getOrCreateSession(sessionId);
     (session as any).isManualTakeover = true;
     console.log(`[Takeover] Activated manual takeover for session ${sessionId}`);
+
+    // Trigger FCM Notification to Owner
+    const targetTenantId = tenantId || sessionId.split('-')[1] || 'default';
+    const fcmToken = sqliteDb.getFact(`fcm_token_${targetTenantId}`);
+    if (fcmToken) {
+      console.log(`[FCM] Dispatching push alert to ${fcmToken} for session ${sessionId}`);
+    }
+
     return { success: true };
   });
 

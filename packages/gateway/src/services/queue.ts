@@ -3,7 +3,7 @@ import { getSqliteManager } from '@nova/shared';
 
 export interface QueueJob {
   id: string;
-  channel: 'telegram' | 'whatsapp';
+  channel: 'telegram' | 'whatsapp' | 'instagram';
   tenantId: string;
   senderId: string;
   text: string;
@@ -57,7 +57,7 @@ export class QueueService {
    * Enqueues a message processing job
    */
   async enqueueMessage(
-    channel: 'telegram' | 'whatsapp',
+    channel: 'telegram' | 'whatsapp' | 'instagram',
     tenantId: string,
     senderId: string,
     text: string,
@@ -95,7 +95,7 @@ export class QueueService {
    * Periodically checks and processes the in-memory queue sequentially
    */
   private startMemoryQueueProcessor() {
-    setInterval(async () => {
+    const timer = setInterval(async () => {
       if (this.isProcessing || this.memoryQueue.length === 0) return;
       this.isProcessing = true;
 
@@ -121,13 +121,17 @@ export class QueueService {
 
       this.isProcessing = false;
     }, 100);
+
+    if (typeof timer.unref === 'function') {
+      timer.unref();
+    }
   }
 
   /**
    * The actual task runner that calls handleUserMessage and delivers the response
    */
   private async processMessageTask(
-    channel: 'telegram' | 'whatsapp',
+    channel: 'telegram' | 'whatsapp' | 'instagram',
     tenantId: string,
     senderId: string,
     text: string,
@@ -181,6 +185,29 @@ export class QueueService {
         console.log(`[QueueProcessor] Sent WhatsApp Cloud API reply to sender ${senderId}`);
       } else {
         throw new Error('Missing Meta Whatsapp credentials or phone ID in task data');
+      }
+    } else if (channel === 'instagram') {
+      const instagramToken = tenant.whatsappToken || extraData?.instagramToken;
+      if (instagramToken) {
+        const response = await fetch(`https://graph.facebook.com/v18.0/me/messages`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${instagramToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            recipient: { id: senderId },
+            message: { text: replyText },
+          }),
+        });
+
+        if (!response.ok) {
+          const errText = await response.text();
+          throw new Error(`Meta Instagram API returned HTTP ${response.status}: ${errText}`);
+        }
+        console.log(`[QueueProcessor] Sent Instagram message reply to sender ${senderId}`);
+      } else {
+        throw new Error('Missing Meta Instagram access token');
       }
     }
   }

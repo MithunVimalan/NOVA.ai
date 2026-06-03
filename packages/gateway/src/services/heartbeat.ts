@@ -14,6 +14,9 @@ export class HeartbeatService {
       console.log(`[Heartbeat] Service checking in. System is healthy.`);
       this.notifyOwner(`[NOVA Heartbeat] I am online and listening. Current local time: ${new Date().toLocaleTimeString()}`);
     }, 3600000); // 1 hour
+    if (this.intervalTimer && typeof this.intervalTimer.unref === 'function') {
+      this.intervalTimer.unref();
+    }
   }
 
   public registerListener(channelId: string, callback: NotificationCallback): void {

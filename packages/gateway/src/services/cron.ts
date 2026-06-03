@@ -92,6 +92,9 @@ export class CronService {
       }
     }, intervalMs);
 
+    if (typeof timer.unref === 'function') {
+      timer.unref();
+    }
     this.intervals.push(timer);
   }
 
