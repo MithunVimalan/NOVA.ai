@@ -44,6 +44,33 @@ export class SessionManager {
     channelType: 'telegram' | 'whatsapp' | 'web' | 'widget' | 'voice' | 'instagram' = 'web'
   ): Promise<string> {
     const session = this.getOrCreateSession(sessionId, isOwner);
+
+    // Escalation Keyword Guardrails (Guest messages only)
+    if (!isOwner) {
+      const lowerMsg = messageText.toLowerCase();
+      const escalationKeywords = ['human', 'support', 'billing issue', 'chargeback', 'refund', 'representative', 'agent', 'speak to a real'];
+      const shouldEscalate = escalationKeywords.some(keyword => lowerMsg.includes(keyword));
+
+      if (shouldEscalate) {
+        (session as any).isManualTakeover = true;
+        session.history.push({ role: 'user', content: messageText });
+
+        // Dispatch FCM Push Alert & Heartbeat notifications
+        const tenantId = sessionId.split('-')[1] || 'default';
+        const sqliteDb = getSqliteManager();
+        const fcmToken = sqliteDb.getFact(`fcm_token_${tenantId}`);
+        if (fcmToken) {
+          console.log(`[FCM Push Alert] Sent to ${fcmToken} for session ${sessionId}`);
+        }
+
+        const heartbeatService = getHeartbeatService();
+        heartbeatService.notifyOwner(
+          `[NOVA Takeover Alert] Session "${sessionId}" escalated to manual takeover on "${channelType}": "${messageText}"`
+        );
+
+        return "I have activated manual takeover mode. A human representative has been notified and will respond to you shortly.";
+      }
+    }
     
     // Check if session is in manual takeover mode (and message is from a Guest)
     if ((session as any).isManualTakeover && !isOwner) {
