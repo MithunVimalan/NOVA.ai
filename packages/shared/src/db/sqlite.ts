@@ -77,8 +77,9 @@ export class SqliteManager {
       // Attempt to load better-sqlite3 dynamically
       const Database = require('better-sqlite3');
       this.dbInstance = new Database(this.dbPath);
+      this.dbInstance.pragma('journal_mode = WAL');
       this.setupTables();
-      console.log(`[Database] Initialized SQLite at ${this.dbPath}`);
+      console.log(`[Database] Initialized SQLite at ${this.dbPath} (WAL Mode enabled)`);
     } catch (e) {
       this.isFallback = true;
       this.dbPath = path.join(this.memoryPath, 'nova_db_fallback.json');
@@ -418,6 +419,17 @@ export class SqliteManager {
       } catch (e) {
         console.error(`[Database] getSalesLogs failed:`, e);
         return [];
+      }
+    }
+  }
+
+  public close(): void {
+    if (!this.isFallback && this.dbInstance) {
+      try {
+        this.dbInstance.close();
+        console.log('[Database] SQLite database connection closed cleanly.');
+      } catch (e) {
+        console.error('[Database] Failed to close SQLite database connection:', e);
       }
     }
   }

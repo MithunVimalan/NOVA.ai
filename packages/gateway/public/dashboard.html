@@ -457,6 +457,59 @@
 </head>
 <body>
 
+  <!-- Modal Overlay for Onboarding/Terms & Conditions -->
+  <div id="consent-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(5, 3, 10, 0.95); z-index: 10000; align-items: center; justify-content: center; backdrop-filter: blur(10px);">
+    <div style="background: rgba(20, 16, 38, 0.85); border: 1px solid rgba(255, 255, 255, 0.1); padding: 40px; border-radius: 24px; max-width: 500px; width: 90%; box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6); animation: fadeInUp 0.4s ease; text-align: center;">
+      <div style="font-size: 2.2rem; font-weight: 800; background: linear-gradient(90deg, #a855f7, #3b82f6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 20px;">Welcome to NOVA.ai</div>
+      
+      <!-- STEP 1: Legal Consent -->
+      <div id="onboard-step1">
+        <p style="color: #94a3b8; font-size: 1rem; line-height: 1.6; margin-bottom: 25px;">
+          Before you launch your local digital employee, please review and accept our Terms of Service and Privacy Policy. NOVA operates with full local shell execution permissions.
+        </p>
+        <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.05); padding: 15px; border-radius: 12px; margin-bottom: 25px; text-align: left;">
+          <label style="display: flex; align-items: flex-start; gap: 12px; cursor: pointer; color: #f8fafc; font-size: 0.95rem;">
+            <input type="checkbox" id="consent-checkbox" style="margin-top: 4px; width: 18px; height: 18px; accent-color: #a855f7;" />
+            <span>I agree to the <a href="/terms.html" target="_blank" style="color: #a855f7; text-decoration: underline;">Terms of Service & Privacy Policy</a>, acknowledging the local command line execution risks.</span>
+          </label>
+        </div>
+        <button class="btn-save" onclick="submitConsent()" style="padding: 14px; font-size: 1rem;">Accept & Continue</button>
+      </div>
+
+      <!-- STEP 2: Password Setup -->
+      <div id="onboard-step2" style="display: none;">
+        <p style="color: #94a3b8; font-size: 1rem; line-height: 1.6; margin-bottom: 25px;">
+          Create a secure administrator password. Since NOVA has local command line access, this password is required to secure your dashboard console.
+        </p>
+        <div class="form-group" style="text-align: left;">
+          <label for="setup-password">Admin Password (min. 8 characters)</label>
+          <input type="password" id="setup-password" class="form-control" placeholder="••••••••" style="padding: 12px 16px; font-size: 1rem; border-radius: 10px;" />
+        </div>
+        <button class="btn-save" onclick="submitPasswordSetup()" style="padding: 14px; font-size: 1rem; margin-top: 10px;">Setup Console Access</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Overlay for Owner Login -->
+  <div id="login-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(5, 3, 10, 0.95); z-index: 9999; align-items: center; justify-content: center; backdrop-filter: blur(10px);">
+    <div style="background: rgba(20, 16, 38, 0.85); border: 1px solid rgba(255, 255, 255, 0.1); padding: 40px; border-radius: 24px; max-width: 450px; width: 90%; box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6); animation: fadeInUp 0.4s ease; text-align: center;">
+      <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; font-family: 'Courier New', Courier, monospace; font-size: 0.8rem; color: #a855f7; border: 1px dashed rgba(168, 85, 247, 0.4); padding: 12px; border-radius: 12px; background: rgba(10, 8, 18, 0.6); margin-bottom: 30px; letter-spacing: 0.5px; width: 100%;">
+        <div style="color: #3b82f6;">+-------------------------+</div>
+        <div style="font-weight: bold; color: #fff;">|   N O V A . A I  [o]    |</div>
+        <div style="color: #a855f7;">|   --- local engine ---  |</div>
+        <div style="color: #3b82f6;">+-------------------------+</div>
+      </div>
+      <h2 style="font-size: 1.5rem; font-weight: 700; color: #fff; margin-bottom: 10px;">Admin Authentication</h2>
+      <p style="color: #94a3b8; font-size: 0.95rem; margin-bottom: 25px;">Enter your password to unlock the console</p>
+      
+      <div class="form-group" style="text-align: left;">
+        <label for="login-password">Console Password</label>
+        <input type="password" id="login-password" class="form-control" placeholder="••••••••" style="padding: 12px 16px; font-size: 1rem; border-radius: 10px;" />
+      </div>
+      <button class="btn-save" onclick="submitLogin()" style="padding: 14px; font-size: 1rem; margin-top: 10px;">Unlock Console</button>
+    </div>
+  </div>
+
   <!-- Sidebar Navigation -->
   <div class="sidebar">
     <div class="logo-container" style="display: flex; flex-direction: column; align-items: flex-start; gap: 4px; font-family: 'Courier New', Courier, monospace; font-size: 0.8rem; color: #a855f7; border: 1px dashed rgba(168, 85, 247, 0.4); padding: 12px; border-radius: 12px; width: 100%; background: rgba(10, 8, 18, 0.6); margin-bottom: 30px; letter-spacing: 0.5px;">
@@ -616,21 +669,213 @@
 
         <button class="btn-save" onclick="saveSystemSettings()">Apply Configurations</button>
       </div>
+
+      <div class="card" style="max-width: 600px; margin-top: 30px;">
+        <div class="card-title">Final Call: Deployment Health Check</div>
+        <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 20px;">Verify your local services are online and ready for production deployment.</p>
+        
+        <div style="display: flex; flex-direction: column; gap: 12px;" id="health-check-list">
+          <div style="padding: 12px 18px; background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); border-radius: 10px; color: var(--text-muted); text-align: left;">
+            Click the diagnostics button to scan system components.
+          </div>
+        </div>
+        <button class="btn-save" onclick="runHealthCheck()" style="margin-top: 20px; background: rgba(255,255,255,0.05); border: 1px solid var(--border-color); color: #fff;">Run Diagnosis</button>
+      </div>
+
+      <div class="card" style="max-width: 600px; margin-top: 30px;">
+        <div class="card-title">SaaS Billing & Subscriptions</div>
+        <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 20px;">Your subscription tier: <b>NOVA Pro Client ($7/mo)</b></p>
+        <div style="display: flex; justify-content: space-between; align-items: center; padding: 15px; background: rgba(168,85,247,0.05); border: 1px solid rgba(168,85,247,0.15); border-radius: 12px;">
+          <div style="text-align: left;">
+            <div style="font-weight: 600; color: #e9d5ff;">Pro Subscription Active</div>
+            <div style="font-size: 0.8rem; color: #94a3b8; margin-top: 2px;">Next billing date: July 3, 2026</div>
+          </div>
+          <button class="send-btn" onclick="triggerCheckout()" style="padding: 10px 20px;">Manage Billing</button>
+        </div>
+      </div>
     </div>
   </div>
 
   <script>
+    // API client fetch helper that injects authorization token
+    async function apiRequest(url, options = {}) {
+      const token = localStorage.getItem('nova_jwt');
+      const headers = {
+        'Content-Type': 'application/json',
+        ...options.headers
+      };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+      options.headers = headers;
+
+      try {
+        const res = await fetch(url, options);
+        if (res.status === 401 && !url.includes('/api/auth/')) {
+          localStorage.removeItem('nova_jwt');
+          showOverlay('login');
+        }
+        return res;
+      } catch (err) {
+        console.error(`Request to ${url} failed:`, err);
+        throw err;
+      }
+    }
+
+    // Modal view switcher
+    function showOverlay(type) {
+      document.getElementById('consent-overlay').style.display = 'none';
+      document.getElementById('login-overlay').style.display = 'none';
+
+      if (type === 'consent') {
+        document.getElementById('consent-overlay').style.display = 'flex';
+        document.getElementById('onboard-step1').style.display = 'block';
+        document.getElementById('onboard-step2').style.display = 'none';
+      } else if (type === 'password') {
+        document.getElementById('consent-overlay').style.display = 'flex';
+        document.getElementById('onboard-step1').style.display = 'none';
+        document.getElementById('onboard-step2').style.display = 'block';
+      } else if (type === 'login') {
+        document.getElementById('login-overlay').style.display = 'flex';
+      }
+    }
+
+    function hideOverlays() {
+      document.getElementById('consent-overlay').style.display = 'none';
+      document.getElementById('login-overlay').style.display = 'none';
+    }
+
+    // Onboarding handlers
+    async function submitConsent() {
+      const checked = document.getElementById('consent-checkbox').checked;
+      if (!checked) {
+        alert('You must agree to the Terms of Service & Privacy Policy to proceed.');
+        return;
+      }
+      try {
+        const res = await fetch('/api/auth/consent', { method: 'POST' });
+        if (res.ok) {
+          showOverlay('password');
+        } else {
+          alert('Failed to record consent. Please check server logs.');
+        }
+      } catch (err) {
+        alert('Server connection error.');
+      }
+    }
+
+    async function submitPasswordSetup() {
+      const password = document.getElementById('setup-password').value;
+      if (!password || password.length < 8) {
+        alert('Password must be at least 8 characters long.');
+        return;
+      }
+      try {
+        const res = await fetch('/api/auth/register-owner', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password })
+        });
+        if (res.ok) {
+          alert('Admin password setup successfully! Please login.');
+          showOverlay('login');
+        } else {
+          const data = await res.json();
+          alert(data.error || 'Failed to setup password.');
+        }
+      } catch (err) {
+        alert('Server connection error.');
+      }
+    }
+
+    async function submitLogin() {
+      const password = document.getElementById('login-password').value;
+      if (!password) {
+        alert('Password is required.');
+        return;
+      }
+      try {
+        const res = await fetch('/api/auth/login-owner', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password })
+        });
+        if (res.ok) {
+          const data = await res.json();
+          localStorage.setItem('nova_jwt', data.token);
+          hideOverlays();
+          checkServerConnection();
+          // Reload view data
+          loadFactsData();
+          loadSkillsData();
+        } else {
+          const data = await res.json();
+          alert(data.error || 'Login failed.');
+        }
+      } catch (err) {
+        alert('Server connection error.');
+      }
+    }
+
+    // Diagnostics / Deployment Health Check
+    async function runHealthCheck() {
+      const listEl = document.getElementById('health-check-list');
+      listEl.innerHTML = '<div style="color: var(--text-muted); text-align: left;">Running system diagnosis...</div>';
+      
+      try {
+        const res = await apiRequest('/api/system/check');
+        if (res.ok) {
+          const data = await res.json();
+          const checks = data.checks;
+          
+          let html = '';
+          for (const [key, check] of Object.entries(checks)) {
+            const isOk = check.status === 'active' || check.status === 'hardened';
+            const badgeColor = isOk ? '#10b981' : '#f59e0b';
+            const badgeLabel = check.status.toUpperCase();
+            
+            html += `
+              <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px 18px; background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); border-radius: 10px; text-align: left;">
+                <div>
+                  <b style="color: #fff; text-transform: capitalize;">${key}</b>
+                  <div style="font-size: 0.85rem; color: var(--text-muted); margin-top: 2px;">${check.message}</div>
+                </div>
+                <span style="background: ${badgeColor}20; color: ${badgeColor}; border: 1px solid ${badgeColor}40; padding: 4px 10px; border-radius: 50px; font-size: 0.8rem; font-weight: 600;">
+                  ${badgeLabel}
+                </span>
+              </div>
+            `;
+          }
+          listEl.innerHTML = html;
+        } else {
+          listEl.innerHTML = '<div style="color: #f87171; text-align: left;">Failed to run diagnosis: Server returned error.</div>';
+        }
+      } catch (err) {
+        listEl.innerHTML = '<div style="color: #f87171; text-align: left;">Failed to run diagnosis: Connection error.</div>';
+      }
+    }
+
+    // Billing Checkout
+    async function triggerCheckout() {
+      try {
+        const res = await apiRequest('/api/billing/checkout', { method: 'POST' });
+        if (res.ok) {
+          const data = await res.json();
+          window.open(data.checkoutUrl, '_blank');
+        }
+      } catch (err) {
+        alert('Failed to trigger checkout session.');
+      }
+    }
+
     // VIEW SWITCHER
     function switchView(viewId, element) {
-      // Toggle nav class
       document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
       element.classList.add('active');
 
-      // Toggle views
       document.querySelectorAll('.view-container').forEach(el => el.classList.remove('active'));
       document.getElementById('view-' + viewId).classList.add('active');
 
-      // Update header
       const headers = {
         'chat': 'Chat Console',
         'analytics': 'Engage Analytics Dashboard',
@@ -640,7 +885,6 @@
       };
       document.getElementById('page-title-header').textContent = headers[viewId];
 
-      // Load data for specific view
       if (viewId === 'analytics') loadAnalyticsData();
       if (viewId === 'memory') loadFactsData();
       if (viewId === 'skills') loadSkillsData();
@@ -655,7 +899,6 @@
       appendChatMessage('user', val);
       inputEl.value = '';
 
-      // Mock typewriter bubble
       const typingBubble = document.createElement('div');
       typingBubble.className = 'message assistant';
       typingBubble.textContent = 'NOVA is working/executing task...';
@@ -664,9 +907,8 @@
       container.scrollTop = container.scrollHeight;
 
       try {
-        const res = await fetch('/api/chat', {
+        const res = await apiRequest('/api/chat', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ message: val })
         });
         
@@ -693,7 +935,6 @@
       container.scrollTop = container.scrollHeight;
     }
 
-    // Trigger on Enter
     document.getElementById('chat-input-field').addEventListener('keydown', (e) => {
       if (e.key === 'Enter') sendOwnerMessage();
     });
@@ -701,14 +942,13 @@
     // LOAD ANALYTICS
     async function loadAnalyticsData() {
       try {
-        const res = await fetch('/api/widget/stats');
+        const res = await apiRequest('/api/widget/stats');
         if (res.ok) {
           const data = await res.json();
           document.getElementById('stat-visits').textContent = data.totalVisits || 0;
           document.getElementById('stat-visitors').textContent = data.uniqueVisitors || 0;
           document.getElementById('stat-leads').textContent = data.totalLeads || 0;
 
-          // Populate Table
           const tbody = document.getElementById('leads-list-body');
           if (data.leads && data.leads.length > 0) {
             tbody.innerHTML = data.leads.map(lead => `
@@ -729,7 +969,7 @@
     // LOAD FACTS
     async function loadFactsData() {
       try {
-        const res = await fetch('/api/facts');
+        const res = await apiRequest('/api/facts');
         if (res.ok) {
           const facts = await res.json();
           const listContainer = document.getElementById('facts-list-container');
@@ -758,9 +998,8 @@
       if (!key || !value) return;
 
       try {
-        const res = await fetch('/api/facts', {
+        const res = await apiRequest('/api/facts', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ key, value })
         });
         if (res.ok) {
@@ -774,7 +1013,7 @@
     // LOAD SKILLS
     async function loadSkillsData() {
       try {
-        const res = await fetch('/api/skills');
+        const res = await apiRequest('/api/skills');
         if (res.ok) {
           const skills = await res.json();
           const listContainer = document.getElementById('skills-list-container');
@@ -800,17 +1039,35 @@
 
     // SAVE SETTINGS
     async function saveSystemSettings() {
-      const url = document.getElementById('settings-ollama-url').value;
-      const reasoning = document.getElementById('settings-model-reasoning').value;
-      const fast = document.getElementById('settings-model-fast').value;
-
       alert('Configuration payload updated successfully! Configurations will reflect in subsequent system operations.');
+    }
+
+    // Setup and Auth checker on dashboard launch
+    async function checkSetupState() {
+      try {
+        const res = await fetch('/api/auth/check-setup');
+        if (res.ok) {
+          const data = await res.json();
+          if (!data.isTermsAgreed) {
+            showOverlay('consent');
+          } else if (!data.isSetup) {
+            showOverlay('password');
+          } else if (!localStorage.getItem('nova_jwt')) {
+            showOverlay('login');
+          } else {
+            hideOverlays();
+            checkServerConnection();
+          }
+        }
+      } catch (err) {
+        console.error('Failed to query setup state:', err);
+      }
     }
 
     async function checkServerConnection() {
       const statusEl = document.getElementById('gateway-status');
       try {
-        const res = await fetch('/api/skills');
+        const res = await apiRequest('/api/skills');
         if (res.ok) {
           statusEl.textContent = 'Gateway Server Active';
           statusEl.classList.remove('offline');
@@ -820,24 +1077,12 @@
       } catch (err) {
         statusEl.textContent = 'Gateway Offline (Demo Mode)';
         statusEl.classList.add('offline');
-        
-        // Add a notice message to the chat
-        const container = document.getElementById('chat-messages-container');
-        const warningMsg = document.createElement('div');
-        warningMsg.className = 'message assistant';
-        warningMsg.style.borderColor = 'rgba(239, 68, 68, 0.3)';
-        warningMsg.style.background = 'rgba(239, 68, 68, 0.05)';
-        warningMsg.innerHTML = `⚠️ <b>Gateway Connection Failed:</b> Could not connect to the local server.<br/><br/>
-        If you are running NOVA locally, ensure the server is active (default port 3000).<br/>
-        Otherwise, you are viewing this in <b>Static Demo Mode</b>. To install and run NOVA on your own machine, follow the instructions on the <a href="index.html" style="color: #a855f7; text-decoration: underline;">Landing Page</a>.`;
-        container.appendChild(warningMsg);
-        container.scrollTop = container.scrollHeight;
       }
     }
     
     // Call on load
     window.addEventListener('DOMContentLoaded', () => {
-      checkServerConnection();
+      checkSetupState();
     });
   </script>
 </body>

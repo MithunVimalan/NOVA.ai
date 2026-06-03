@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NOVA.ai — Terms of Service & Privacy Policy</title>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-color: #080612;
+      --card-bg: rgba(20, 16, 38, 0.6);
+      --border-color: rgba(255, 255, 255, 0.08);
+      --accent-purple: #a855f7;
+      --accent-blue: #3b82f6;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Outfit', sans-serif;
+      background-color: var(--bg-color);
+      background-image: 
+        radial-gradient(at 0% 0%, rgba(168, 85, 247, 0.12) 0px, transparent 50%),
+        radial-gradient(at 100% 100%, rgba(59, 130, 246, 0.12) 0px, transparent 50%);
+      color: var(--text-main);
+      line-height: 1.6;
+      padding: 60px 20px;
+    }
+
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+      background: var(--card-bg);
+      backdrop-filter: blur(20px);
+      border: 1px solid var(--border-color);
+      border-radius: 24px;
+      padding: 50px 40px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+    }
+
+    .header-box {
+      text-align: center;
+      margin-bottom: 40px;
+      border-bottom: 1px solid var(--border-color);
+      padding-bottom: 30px;
+    }
+
+    .logo {
+      font-size: 2rem;
+      font-weight: 800;
+      letter-spacing: 1px;
+      background: linear-gradient(90deg, #a855f7, #3b82f6);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 10px;
+    }
+
+    h1 {
+      font-size: 1.8rem;
+      margin-bottom: 20px;
+      color: #fff;
+    }
+
+    h2 {
+      font-size: 1.3rem;
+      margin-top: 35px;
+      margin-bottom: 15px;
+      color: #e2e8f0;
+      border-left: 3px solid var(--accent-purple);
+      padding-left: 12px;
+    }
+
+    p {
+      color: var(--text-muted);
+      margin-bottom: 15px;
+      font-size: 0.98rem;
+    }
+
+    ul {
+      margin-left: 20px;
+      margin-bottom: 20px;
+      color: var(--text-muted);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    li {
+      font-size: 0.95rem;
+    }
+
+    .back-btn {
+      display: inline-block;
+      margin-top: 30px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border-color);
+      color: #fff;
+      padding: 10px 24px;
+      border-radius: 50px;
+      text-decoration: none;
+      font-weight: 600;
+      transition: all 0.3s ease;
+    }
+
+    .back-btn:hover {
+      background: rgba(255, 255, 255, 0.1);
+      border-color: var(--accent-purple);
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header-box">
+      <div class="logo">NOVA.ai</div>
+      <h1>Terms of Service & Privacy Policy</h1>
+      <p>Effective Date: June 3, 2026</p>
+    </div>
+
+    <h2>1. General Agreement</h2>
+    <p>By installing, executing, or using the NOVA.ai software platform (including the desktop dashboard, CLI client, and conversational channels), you agree to be bound by these Terms of Service and Privacy Policy. If you do not agree, you are not authorized to use the application.</p>
+
+    <h2>2. Local-First Operation & Data Privacy</h2>
+    <p>NOVA.ai is designed as a State-Isolated Service-Oriented Architecture (SISOA) running locally on your computer. We value your privacy and security:</p>
+    <ul>
+      <li><b>Zero Cloud Telemetry:</b> Your prompts, logs, files, and chatbot conversation histories remain strictly on your local device database.</li>
+      <li><b>Local LLM Processing:</b> Unless configured otherwise by the user to use premium web-based speech models, all text inference is evaluated locally using Ollama.</li>
+      <li><b>Credentials Encryption:</b> System environment configurations and API integration keys (e.g. HubSpot tokens, Telegram keys) are saved on your local storage and encrypted using AES-256-GCM.</li>
+    </ul>
+
+    <h2>3. Automated Shell Command & Execution Risks</h2>
+    <p>NOVA.ai includes capabilities to run commands on your system shell, download files, edit source code, and interact with native browser sessions (headless Chromium):</p>
+    <ul>
+      <li>You acknowledge that permitting the virtual assistant to execute commands on your host system carries security risks.</li>
+      <li>All scripts are run under your own user permissions. We are not liable for any data loss, system corruptions, or security breaches resulting from scripts composed by local AI workers.</li>
+      <li>For safety, utilize the built-in Copilot approval gates to intercept and confirm critical command lines before they are fired on your terminal.</li>
+    </ul>
+
+    <h2>4. Commercial Subscriptions</h2>
+    <p>The NOVA Pro Client is a paid commercial service priced at $7/month per client. Payment processing is managed securely via Stripe. Failure to keep active subscription accounts in good standing may result in the suspension of multichannel webhooks (such as WhatsApp or Telegram integrations) linked to active payment gateways.</p>
+
+    <h2>5. Disclaimer of Warranties</h2>
+    <p>THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.</p>
+
+    <div style="text-align: center;">
+      <a href="dashboard.html" class="back-btn">Back to Dashboard</a>
+    </div>
+  </div>
+</body>
+</html>

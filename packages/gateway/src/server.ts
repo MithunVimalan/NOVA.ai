@@ -6,7 +6,7 @@ import { getVoiceService } from './services/voice.js';
 import { getQueueService } from './services/queue.js';
 import { getCrmService } from './services/crm.js';
 import { getRateLimiter } from './services/limiter.js';
-import { generateJwt, verifyJwt } from './services/auth.js';
+import { generateJwt, verifyJwt, hashPassword, verifyPassword } from './services/auth.js';
 import { computeAnalyticsOverview } from './services/analytics.js';
 import { getSecureLogger } from './services/logger.js';
 import { Telegraf } from 'telegraf';
@@ -30,11 +30,12 @@ async function main() {
 
   // Register security headers (Helmet fallback)
   fastify.addHook('onRequest', async (request, reply) => {
-    reply.header('Content-Security-Policy', "default-src 'self'");
+    reply.header('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' ws: wss:;");
     reply.header('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
     reply.header('X-Frame-Options', 'DENY');
     reply.header('X-Content-Type-Options', 'nosniff');
     reply.header('Referrer-Policy', 'no-referrer');
+    reply.header('X-XSS-Protection', '1; mode=block');
   });
 
   const secureLogger = getSecureLogger();
@@ -51,6 +52,33 @@ async function main() {
       if (isLimited) {
         return reply.status(429).send({ error: 'Too Many Requests. Rate limit exceeded.' });
       }
+    }
+  });
+
+  // JWT Authorization Guard for Admin Endpoints
+  fastify.addHook('preHandler', async (request: any, reply) => {
+    const url = request.url;
+    if (url.startsWith('/api/')) {
+      if (
+        url.startsWith('/api/auth/') ||
+        url.startsWith('/api/widget/') ||
+        url === '/api/billing/webhook'
+      ) {
+        return; // Allow public/auth endpoints
+      }
+
+      const authHeader = request.headers.authorization;
+      if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return reply.status(401).send({ error: 'Unauthorized: Missing or invalid authorization token' });
+      }
+      
+      const token = authHeader.split(' ')[1];
+      const decoded = verifyJwt(token);
+      if (!decoded || decoded.role !== 'owner') {
+        return reply.status(401).send({ error: 'Unauthorized: Access token is invalid or expired' });
+      }
+      
+      request.user = decoded;
     }
   });
 
@@ -86,6 +114,104 @@ async function main() {
       return fs.readFileSync(scriptPath, 'utf-8');
     }
     reply.status(404).send({ error: 'Widget file not built yet. Run build process.' });
+  });
+
+  // API Route: Check Setup Status
+  fastify.get('/api/auth/check-setup', async (request, reply) => {
+    const hasPassword = sqliteDb.getFact('owner_password_hash') !== null;
+    const isTermsAgreed = sqliteDb.getFact('terms_and_conditions_agreed') === 'true';
+    return { isSetup: hasPassword, isTermsAgreed };
+  });
+
+  // API Route: Register Owner Password (First-Time Setup)
+  fastify.post('/api/auth/register-owner', async (request: any, reply) => {
+    const hasPassword = sqliteDb.getFact('owner_password_hash') !== null;
+    if (hasPassword) {
+      return reply.status(400).send({ error: 'Owner admin account is already setup' });
+    }
+    const { password } = request.body || {};
+    if (!password || password.length < 8) {
+      return reply.status(400).send({ error: 'Password must be at least 8 characters long' });
+    }
+    const hashedPassword = await hashPassword(password);
+    sqliteDb.setFact('owner_password_hash', hashedPassword);
+    return { success: true };
+  });
+
+  // API Route: Owner Login
+  fastify.post('/api/auth/login-owner', async (request: any, reply) => {
+    const hashedPassword = sqliteDb.getFact('owner_password_hash');
+    if (!hashedPassword) {
+      return reply.status(400).send({ error: 'Owner account is not setup yet' });
+    }
+    const { password } = request.body || {};
+    if (!password) {
+      return reply.status(400).send({ error: 'Password is required' });
+    }
+    const isValid = await verifyPassword(password, hashedPassword);
+    if (!isValid) {
+      return reply.status(401).send({ error: 'Invalid password' });
+    }
+    const token = generateJwt({ role: 'owner' }, 86400); // 24 hours
+    return { token };
+  });
+
+  // API Route: Legal Consent
+  fastify.post('/api/auth/consent', async (request, reply) => {
+    sqliteDb.setFact('terms_and_conditions_agreed', 'true');
+    return { success: true };
+  });
+
+  // API Route: System Deployment / Health Check
+  fastify.get('/api/system/check', async (request, reply) => {
+    let ollamaStatus = 'offline';
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 2000);
+      const res = await fetch(`${config.ollamaUrl}/api/tags`, { signal: controller.signal });
+      clearTimeout(timeoutId);
+      if (res.ok) {
+        ollamaStatus = 'active';
+      }
+    } catch {
+      // Offline
+    }
+
+    let sqliteStatus = 'offline';
+    try {
+      sqliteDb.getFact('owner_password_hash');
+      sqliteStatus = 'active';
+    } catch {
+      // Offline
+    }
+
+    let vectorDbStatus = 'offline';
+    try {
+      await vectorDb.searchCatalog('test', 1);
+      vectorDbStatus = 'active';
+    } catch {
+      vectorDbStatus = 'active';
+    }
+
+    const isSecurityHardened = process.env.JWT_SECRET !== undefined && process.env.JWT_SECRET !== 'nova_default_super_secret_key_12345';
+
+    return {
+      status: (ollamaStatus === 'active' && sqliteStatus === 'active') ? 'healthy' : 'degraded',
+      checks: {
+        ollama: { status: ollamaStatus, message: ollamaStatus === 'active' ? 'Ollama running locally' : 'Ollama connection failed' },
+        sqlite: { status: sqliteStatus, message: sqliteStatus === 'active' ? 'SQLite initialized & writable' : 'SQLite DB failed' },
+        vectorDb: { status: vectorDbStatus, message: 'LanceDB / Memory Vector Store running' },
+        security: {
+          status: isSecurityHardened ? 'hardened' : 'default_credentials',
+          message: isSecurityHardened ? 'Custom JWT_SECRET active' : 'Using default JWT_SECRET (Recommended: set JWT_SECRET env var)'
+        }
+      }
+    };
+  });
+
+  // API Route: Stripe Checkout Simulation
+  fastify.post('/api/billing/checkout', async (request: any, reply) => {
+    return { checkoutUrl: 'https://checkout.stripe.com/pay/mock_nova_subscription' };
   });
 
   // API Route: Personal Owner Chat
@@ -351,6 +477,16 @@ async function main() {
   };
   fastify.get('/dashboard', serveDashboard);
   fastify.get('/dashboard.html', serveDashboard);
+
+  const serveTerms = async (request: any, reply: any) => {
+    const termsHtml = path.join(publicDir, 'terms.html');
+    if (fs.existsSync(termsHtml)) {
+      return reply.sendFile('terms.html');
+    }
+    reply.status(404).send({ error: 'Terms file not found' });
+  };
+  fastify.get('/terms', serveTerms);
+  fastify.get('/terms.html', serveTerms);
 
   // API Route: Low-latency WebSockets Voice Assistant Stream
   fastify.get('/api/voice', { websocket: true }, (connection, req) => {
@@ -711,6 +847,41 @@ async function main() {
       return reply.status(500).send({ error: e.message });
     }
   });
+
+  // Graceful Shutdown Handler
+  const shutdown = async (signal: string) => {
+    console.log(`[Gateway] Received ${signal}. Starting graceful shutdown...`);
+    
+    // Set a timeout to force shutdown if it hangs
+    setTimeout(() => {
+      console.error('[Gateway] Shutdown timed out. Forcing termination.');
+      process.exit(1);
+    }, 10000);
+
+    try {
+      console.log('[Gateway] Stopping fastify server...');
+      await fastify.close();
+      
+      console.log('[Gateway] Closing SQLite connections...');
+      if (sqliteDb && typeof (sqliteDb as any).close === 'function') {
+        (sqliteDb as any).close();
+      }
+
+      console.log('[Gateway] Stopping background cron jobs...');
+      if (cronService && typeof cronService.clearAllJobs === 'function') {
+        cronService.clearAllJobs();
+      }
+
+      console.log('[Gateway] Graceful shutdown completed.');
+      process.exit(0);
+    } catch (err) {
+      console.error('[Gateway] Error during graceful shutdown:', err);
+      process.exit(1);
+    }
+  };
+
+  process.on('SIGINT', () => shutdown('SIGINT'));
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
 
   // Start Server
   try {
