@@ -106,8 +106,18 @@ Verify that all modules and integration components are functioning correctly by 
 # Build all packages
 pnpm run build
 
-# Run the test suite
-node --test packages/gateway/dist/services/analytics.test.js packages/gateway/dist/services/compliance.test.js packages/gateway/dist/services/copilot.test.js packages/gateway/dist/services/instagram.test.js packages/gateway/dist/services/swarm.test.js
+# Run the test suite across every workspace package
+pnpm test
+
+# Or run a single package suite
+pnpm --filter @nova/shared run test
+pnpm --filter @nova/gateway run test
+```
+
+Coverage for a package can be inspected with the built-in Node.js reporter:
+
+```bash
+cd packages/gateway && node --test --experimental-test-coverage dist/services/*.test.js
 ```
 
 ---

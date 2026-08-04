@@ -6,7 +6,8 @@
   "types": "dist/index.d.ts",
   "scripts": {
     "build": "tsc",
-    "dev": "tsc -w"
+    "dev": "tsc -w",
+    "test": "node --test dist/**/*.test.js"
   },
   "dependencies": {
     "zod": "^3.22.4",
