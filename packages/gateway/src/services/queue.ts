@@ -1,5 +1,7 @@
 import { getSessionManager } from './session.js';
-import { getSqliteManager } from '@nova/shared';
+import { createRedisClient } from './redis.js';
+import { sendInstagramMessage, sendWhatsAppCloudMessage } from './meta.js';
+import { getSqliteManager, createSingleton, generateId } from '@nova/shared';
 
 export interface QueueJob {
   id: string;
@@ -26,14 +28,10 @@ export class QueueService {
 
   private async initializeQueue() {
     try {
-      const redisUrl = process.env.REDIS_URL;
-      if (redisUrl) {
-        console.log(`[QueueService] Connecting to Redis: ${redisUrl}`);
+      const connection = await createRedisClient('[QueueService]', { maxRetriesPerRequest: null });
+      if (connection) {
         // Attempt dynamic import of bullmq
         const { Queue, Worker } = await import('bullmq');
-        const IoRedisClass = (await import('ioredis')).default;
-        const RedisConstructor: any = (IoRedisClass as any).Redis || IoRedisClass;
-        const connection = new RedisConstructor(redisUrl, { maxRetriesPerRequest: null });
         this.bullQueue = new Queue('nova-messages', { connection });
 
         // Instantiate worker to process jobs asynchronously
@@ -77,7 +75,7 @@ export class QueueService {
       console.log(`[QueueService] Enqueued message job via BullMQ for Tenant ${tenantId}`);
     } else {
       const job: QueueJob = {
-        id: Math.random().toString(36).substring(2, 9) + '-' + Date.now(),
+        id: generateId(undefined, 7),
         channel,
         tenantId,
         senderId,
@@ -164,59 +162,20 @@ export class QueueService {
       console.log(`[QueueProcessor] Sent Telegram message reply to sender ${senderId}`);
     } else if (channel === 'whatsapp') {
       const phoneId = extraData?.phoneId;
-      if (tenant.whatsappToken && phoneId) {
-        const response = await fetch(`https://graph.facebook.com/v18.0/${phoneId}/messages`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${tenant.whatsappToken}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            messaging_product: 'whatsapp',
-            to: senderId,
-            text: { body: replyText },
-          }),
-        });
-
-        if (!response.ok) {
-          const errText = await response.text();
-          throw new Error(`Meta Graph API returned HTTP ${response.status}: ${errText}`);
-        }
-        console.log(`[QueueProcessor] Sent WhatsApp Cloud API reply to sender ${senderId}`);
-      } else {
+      if (!tenant.whatsappToken || !phoneId) {
         throw new Error('Missing Meta Whatsapp credentials or phone ID in task data');
       }
+      await sendWhatsAppCloudMessage(tenant.whatsappToken, senderId, replyText, phoneId);
+      console.log(`[QueueProcessor] Sent WhatsApp Cloud API reply to sender ${senderId}`);
     } else if (channel === 'instagram') {
       const instagramToken = tenant.whatsappToken || extraData?.instagramToken;
-      if (instagramToken) {
-        const response = await fetch(`https://graph.facebook.com/v18.0/me/messages`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${instagramToken}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            recipient: { id: senderId },
-            message: { text: replyText },
-          }),
-        });
-
-        if (!response.ok) {
-          const errText = await response.text();
-          throw new Error(`Meta Instagram API returned HTTP ${response.status}: ${errText}`);
-        }
-        console.log(`[QueueProcessor] Sent Instagram message reply to sender ${senderId}`);
-      } else {
+      if (!instagramToken) {
         throw new Error('Missing Meta Instagram access token');
       }
+      await sendInstagramMessage(instagramToken, senderId, replyText);
+      console.log(`[QueueProcessor] Sent Instagram message reply to sender ${senderId}`);
     }
   }
 }
 
-let queueServiceInstance: QueueService | null = null;
-export function getQueueService(): QueueService {
-  if (!queueServiceInstance) {
-    queueServiceInstance = new QueueService();
-  }
-  return queueServiceInstance;
-}
+export const getQueueService = createSingleton(() => new QueueService());

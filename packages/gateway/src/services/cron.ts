@@ -1,4 +1,4 @@
-import { getSqliteManager } from '@nova/shared';
+import { getSqliteManager, createSingleton } from '@nova/shared';
 
 export interface CronJob {
   id: string;
@@ -122,10 +122,4 @@ export class CronService {
   }
 }
 
-let cronServiceInstance: CronService | null = null;
-export function getCronService(): CronService {
-  if (!cronServiceInstance) {
-    cronServiceInstance = new CronService();
-  }
-  return cronServiceInstance;
-}
+export const getCronService = createSingleton(() => new CronService());

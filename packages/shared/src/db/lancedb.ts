@@ -1,6 +1,9 @@
-import fs from 'node:fs';
 import path from 'node:path';
 import { loadConfig } from '../config.js';
+import { ensureDir, readJsonFile, writeJsonFile } from '../utils/fs.js';
+import { requestJson } from '../utils/http.js';
+import { generateId } from '../utils/id.js';
+import { createSingleton } from '../utils/singleton.js';
 
 export interface VectorRecord {
   id: string;
@@ -10,6 +13,8 @@ export interface VectorRecord {
   metadata: any;
   timestamp: string;
 }
+
+const LOG_LABEL = '[VectorDB]';
 
 export class VectorDbManager {
   private memoryPath: string;
@@ -22,12 +27,8 @@ export class VectorDbManager {
 
   constructor() {
     const config = loadConfig();
-    this.memoryPath = config.paths.memory;
+    this.memoryPath = ensureDir(config.paths.memory);
     this.indexPath = path.join(this.memoryPath, 'vectors_fallback.json');
-
-    if (!fs.existsSync(this.memoryPath)) {
-      fs.mkdirSync(this.memoryPath, { recursive: true });
-    }
 
     this.initializeDb();
   }
@@ -37,53 +38,31 @@ export class VectorDbManager {
       // Attempt to load lancedb dynamically
       const lancedb = require('@lancedb/lancedb');
       this.lancedbInstance = lancedb;
-      console.log(`[VectorDB] LanceDB successfully imported. Using LanceDB backend.`);
+      console.log(`${LOG_LABEL} LanceDB successfully imported. Using LanceDB backend.`);
     } catch (e) {
       this.isFallback = true;
-      console.warn(`[VectorDB] Native LanceDB not available. Falling back to local JS Vector Store: ${this.indexPath}`);
+      console.warn(`${LOG_LABEL} Native LanceDB not available. Falling back to local JS Vector Store: ${this.indexPath}`);
       this.loadIndex();
     }
   }
 
   private loadIndex() {
-    if (fs.existsSync(this.indexPath)) {
-      try {
-        const content = fs.readFileSync(this.indexPath, 'utf-8');
-        this.index = JSON.parse(content);
-      } catch (err) {
-        console.error(`[VectorDB] Error reading vector file, resetting:`, err);
-      }
-    }
+    this.index = readJsonFile<VectorRecord[]>(this.indexPath, this.index, LOG_LABEL);
   }
 
   private saveIndex() {
-    try {
-      fs.writeFileSync(this.indexPath, JSON.stringify(this.index, null, 2), 'utf-8');
-    } catch (err) {
-      console.error(`[VectorDB] Error saving vector file:`, err);
-    }
+    writeJsonFile(this.indexPath, this.index, LOG_LABEL);
   }
 
   // EMBEDDING GENERATOR
   public async getEmbedding(text: string, modelName: string = 'phi3:mini'): Promise<number[]> {
     const config = loadConfig();
-    const url = `${config.ollamaUrl}/api/embeddings`;
-    
+
     try {
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: modelName,
-          prompt: text,
-        }),
+      const data = await requestJson<{ embedding: number[] }>(`${config.ollamaUrl}/api/embeddings`, {
+        label: 'Ollama embeddings',
+        body: { model: modelName, prompt: text },
       });
-
-      if (!response.ok) {
-        throw new Error(`Ollama status: ${response.status}`);
-      }
-
-      const data = await response.json() as { embedding: number[] };
       return data.embedding;
     } catch (e) {
       // Fallback: Generate a simple deterministic pseudo-embedding vector of 128 elements in case Ollama is offline
@@ -122,175 +101,111 @@ export class VectorDbManager {
     return dotProduct / (Math.sqrt(norm1) * Math.sqrt(norm2) || 1);
   }
 
-  // EPISODIC MEMORY
-  public async addEpisodicMemory(sessionId: string, userMessage: string, assistantMessage: string): Promise<void> {
-    const text = `User: ${userMessage}\nAssistant: ${assistantMessage}`;
+  private async embedWithFastModel(text: string): Promise<number[]> {
     const config = loadConfig();
-    const model = config.modelRouting.fast;
-    const vector = await this.getEmbedding(text, model);
-
-    const record: VectorRecord = {
-      id: `memo-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-      table: 'episodic',
-      text,
-      vector,
-      metadata: { sessionId, userMessage, assistantMessage },
-      timestamp: new Date().toISOString(),
-    };
-
-    if (this.isFallback) {
-      this.index.push(record);
-      this.saveIndex();
-    } else {
-      // LanceDB insert logic
-      try {
-        const db = await this.lancedbInstance.connect(path.join(this.memoryPath, 'lancedb'));
-        let table;
-        try {
-          table = await db.openTable('episodic');
-        } catch {
-          table = await db.createTable('episodic', [record]);
-          return;
-        }
-        await table.add([record]);
-      } catch (err) {
-        console.error(`[VectorDB] LanceDB insert failed, falling back:`, err);
-        this.index.push(record);
-        this.saveIndex();
-      }
-    }
+    return this.getEmbedding(text, config.modelRouting.fast);
   }
 
-  public async searchEpisodicMemory(query: string, limit: number = 3): Promise<any[]> {
-    const config = loadConfig();
-    const model = config.modelRouting.fast;
-    const queryVector = await this.getEmbedding(query, model);
-
-    if (this.isFallback) {
-      const scored = this.index
-        .filter(r => r.table === 'episodic')
-        .map(r => ({
-          ...r,
-          score: this.cosineSimilarity(queryVector, r.vector),
-        }))
-        .sort((a, b) => b.score - a.score);
-
-      return scored.slice(0, limit);
-    } else {
-      try {
-        const db = await this.lancedbInstance.connect(path.join(this.memoryPath, 'lancedb'));
-        const table = await db.openTable('episodic');
-        const results = await table.search(queryVector).limit(limit).execute();
-        return results;
-      } catch (err) {
-        console.error(`[VectorDB] LanceDB search failed, falling back:`, err);
-        // JS Fallback search
-        const scored = this.index
-          .filter(r => r.table === 'episodic')
-          .map(r => ({
-            ...r,
-            score: this.cosineSimilarity(queryVector, r.vector),
-          }))
-          .sort((a, b) => b.score - a.score);
-
-        return scored.slice(0, limit);
-      }
-    }
+  private async connectLanceDb(): Promise<any> {
+    return this.lancedbInstance.connect(path.join(this.memoryPath, 'lancedb'));
   }
 
-  // BUSINESS CATALOG RAG
-  public async addCatalogDoc(text: string, metadata: any = {}): Promise<void> {
-    const config = loadConfig();
-    const model = config.modelRouting.fast;
-    const vector = await this.getEmbedding(text, model);
-
+  /**
+   * Stores a text record in the given table, using LanceDB when available and
+   * the local JS vector store otherwise.
+   */
+  private async addRecord(
+    table: VectorRecord['table'],
+    idPrefix: string,
+    text: string,
+    metadata: any
+  ): Promise<void> {
     const record: VectorRecord = {
-      id: `doc-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-      table: 'catalog',
+      id: generateId(idPrefix),
+      table,
       text,
-      vector,
+      vector: await this.embedWithFastModel(text),
       metadata,
       timestamp: new Date().toISOString(),
     };
 
-    if (this.isFallback) {
-      this.index.push(record);
-      this.saveIndex();
-    } else {
+    if (!this.isFallback) {
       try {
-        const db = await this.lancedbInstance.connect(path.join(this.memoryPath, 'lancedb'));
-        let table;
+        const db = await this.connectLanceDb();
+        let lanceTable;
         try {
-          table = await db.openTable('catalog');
+          lanceTable = await db.openTable(table);
         } catch {
-          table = await db.createTable('catalog', [record]);
+          await db.createTable(table, [record]);
           return;
         }
-        await table.add([record]);
+        await lanceTable.add([record]);
+        return;
       } catch (err) {
-        console.error(`[VectorDB] LanceDB catalog insert failed, falling back:`, err);
-        this.index.push(record);
-        this.saveIndex();
+        console.error(`${LOG_LABEL} LanceDB ${table} insert failed, falling back:`, err);
       }
     }
+
+    this.index.push(record);
+    this.saveIndex();
+  }
+
+  /**
+   * Returns the closest matches for a query within the given table.
+   */
+  private async searchRecords(
+    table: VectorRecord['table'],
+    query: string,
+    limit: number
+  ): Promise<any[]> {
+    const queryVector = await this.embedWithFastModel(query);
+
+    if (!this.isFallback) {
+      try {
+        const db = await this.connectLanceDb();
+        const lanceTable = await db.openTable(table);
+        return await lanceTable.search(queryVector).limit(limit).execute();
+      } catch (err) {
+        console.error(`${LOG_LABEL} LanceDB ${table} search failed, falling back:`, err);
+      }
+    }
+
+    return this.index
+      .filter(r => r.table === table)
+      .map(r => ({ ...r, score: this.cosineSimilarity(queryVector, r.vector) }))
+      .sort((a, b) => b.score - a.score)
+      .slice(0, limit);
+  }
+
+  // EPISODIC MEMORY
+  public async addEpisodicMemory(sessionId: string, userMessage: string, assistantMessage: string): Promise<void> {
+    await this.addRecord(
+      'episodic',
+      'memo',
+      `User: ${userMessage}\nAssistant: ${assistantMessage}`,
+      { sessionId, userMessage, assistantMessage }
+    );
+  }
+
+  public async searchEpisodicMemory(query: string, limit: number = 3): Promise<any[]> {
+    return this.searchRecords('episodic', query, limit);
+  }
+
+  // BUSINESS CATALOG RAG
+  public async addCatalogDoc(text: string, metadata: any = {}): Promise<void> {
+    await this.addRecord('catalog', 'doc', text, metadata);
   }
 
   public async searchCatalog(query: string, limit: number = 3): Promise<any[]> {
-    const config = loadConfig();
-    const model = config.modelRouting.fast;
-    const queryVector = await this.getEmbedding(query, model);
-
-    if (this.isFallback) {
-      const scored = this.index
-        .filter(r => r.table === 'catalog')
-        .map(r => ({
-          ...r,
-          score: this.cosineSimilarity(queryVector, r.vector),
-        }))
-        .sort((a, b) => b.score - a.score);
-
-      return scored.slice(0, limit);
-    } else {
-      try {
-        const db = await this.lancedbInstance.connect(path.join(this.memoryPath, 'lancedb'));
-        const table = await db.openTable('catalog');
-        const results = await table.search(queryVector).limit(limit).execute();
-        return results;
-      } catch (err) {
-        console.error(`[VectorDB] LanceDB catalog search failed, falling back:`, err);
-        const scored = this.index
-          .filter(r => r.table === 'catalog')
-          .map(r => ({
-            ...r,
-            score: this.cosineSimilarity(queryVector, r.vector),
-          }))
-          .sort((a, b) => b.score - a.score);
-
-        return scored.slice(0, limit);
-      }
-    }
+    return this.searchRecords('catalog', query, limit);
   }
 
   // Clear RAG catalog to re-index
   public clearCatalog(): void {
-    if (this.isFallback) {
-      this.index = this.index.filter(r => r.table !== 'catalog');
-      this.saveIndex();
-    } else {
-      try {
-        // Simple fallback to clear it in cache too
-        this.index = this.index.filter(r => r.table !== 'catalog');
-        this.saveIndex();
-      } catch {}
-    }
+    this.index = this.index.filter(r => r.table !== 'catalog');
+    this.saveIndex();
   }
 }
 
 // Single instance export
-let vectorDbInstance: VectorDbManager | null = null;
-export function getVectorDbManager(): VectorDbManager {
-  if (!vectorDbInstance) {
-    vectorDbInstance = new VectorDbManager();
-  }
-  return vectorDbInstance;
-}
+export const getVectorDbManager = createSingleton(() => new VectorDbManager());

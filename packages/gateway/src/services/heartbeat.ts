@@ -1,3 +1,5 @@
+import { createSingleton } from '@nova/shared';
+
 export type NotificationCallback = (message: string) => void;
 
 export class HeartbeatService {
@@ -45,10 +47,4 @@ export class HeartbeatService {
   }
 }
 
-let heartbeatServiceInstance: HeartbeatService | null = null;
-export function getHeartbeatService(): HeartbeatService {
-  if (!heartbeatServiceInstance) {
-    heartbeatServiceInstance = new HeartbeatService();
-  }
-  return heartbeatServiceInstance;
-}
+export const getHeartbeatService = createSingleton(() => new HeartbeatService());

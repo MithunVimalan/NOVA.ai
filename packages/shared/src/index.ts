@@ -3,3 +3,7 @@ export * from './db/sqlite.js';
 export * from './db/lancedb.js';
 export * from './llm/router.js';
 export * from './utils/crypto.js';
+export * from './utils/fs.js';
+export * from './utils/http.js';
+export * from './utils/id.js';
+export * from './utils/singleton.js';

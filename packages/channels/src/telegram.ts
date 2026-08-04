@@ -1,5 +1,6 @@
 import { Telegraf } from 'telegraf';
 import { loadConfig, getSqliteManager } from '@nova/shared';
+import { registerOwnerHeartbeat } from './heartbeat.js';
 
 let botInstance: Telegraf | null = null;
 
@@ -61,15 +62,9 @@ export function startTelegramBot(sessionManager: any, heartbeatService: any): vo
     console.log('[Telegram] Bot started and polling successfully.');
 
     // Register to heartbeat service to dispatch proactive messages
-    heartbeatService.registerListener('telegram', (message: string) => {
-      const sqliteDb = getSqliteManager();
-      const chatId = sqliteDb.getFact('owner_telegram_chat_id');
-      if (chatId) {
-        bot.telegram.sendMessage(chatId, message).catch(err => {
-          console.error('[Telegram] Heartbeat send failed:', err);
-        });
-      }
-    });
+    registerOwnerHeartbeat(heartbeatService, 'telegram', 'owner_telegram_chat_id', (chatId, message) =>
+      bot.telegram.sendMessage(chatId, message)
+    );
 
     // Handle graceful shutdowns
     process.once('SIGINT', () => bot.stop('SIGINT'));

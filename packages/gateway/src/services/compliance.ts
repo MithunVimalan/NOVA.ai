@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { walkFiles } from '@nova/shared';
 
 export class ComplianceChecker {
   /**
@@ -50,31 +51,12 @@ export class ComplianceChecker {
   public scanSourceFiles(dirPath: string): { success: boolean; issuesCount: number } {
     let issuesCount = 0;
 
-    const traverse = (currentDir: string) => {
-      const items = fs.readdirSync(currentDir);
-      for (const item of items) {
-        if (item === 'node_modules' || item === '.git' || item === 'dist') continue;
-        const fullPath = path.join(currentDir, item);
-        const stat = fs.statSync(fullPath);
-
-        if (stat.isDirectory()) {
-          traverse(fullPath);
-        } else if (stat.isFile()) {
-          const ext = path.extname(item);
-          if (['.ts', '.js', '.json'].includes(ext)) {
-            const content = fs.readFileSync(fullPath, 'utf-8');
-            const passed = this.scanContentForSecrets(content);
-            if (!passed) {
-              console.error(`[Compliance Failure] Credential pattern triggered in: ${fullPath}`);
-              issuesCount++;
-            }
-          }
-        }
+    for (const filePath of walkFiles(dirPath, { extensions: ['.ts', '.js', '.json'] })) {
+      const content = fs.readFileSync(filePath, 'utf-8');
+      if (!this.scanContentForSecrets(content)) {
+        console.error(`[Compliance Failure] Credential pattern triggered in: ${filePath}`);
+        issuesCount++;
       }
-    };
-
-    if (fs.existsSync(dirPath)) {
-      traverse(dirPath);
     }
 
     return {

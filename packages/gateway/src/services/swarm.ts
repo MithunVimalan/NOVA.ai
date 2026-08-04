@@ -1,4 +1,5 @@
 import { executeTool } from './tools.js';
+import { generateId } from '@nova/shared';
 
 export interface SubTask {
   id: string;
@@ -27,7 +28,7 @@ export class SwarmCoordinator {
     // 1. Check for Scraping / Web Search needs
     if (lowerTask.includes('scrape') || lowerTask.includes('search') || lowerTask.includes('find') || lowerTask.includes('news')) {
       subTasks.push({
-        id: `task-${Math.random().toString(36).substring(2, 6)}-1`,
+        id: `${generateId('task', 4)}-1`,
         description: `Search the web or scrape pages for findings related to: ${task}`,
         assignedWorker: 'ScraperWorker'
       });
@@ -36,7 +37,7 @@ export class SwarmCoordinator {
     // 2. Check for Writing / Coding / Editing needs
     if (lowerTask.includes('write') || lowerTask.includes('create') || lowerTask.includes('file') || lowerTask.includes('code') || lowerTask.includes('report')) {
       subTasks.push({
-        id: `task-${Math.random().toString(36).substring(2, 6)}-2`,
+        id: `${generateId('task', 4)}-2`,
         description: `Write code or output documents based on findings: ${task}`,
         assignedWorker: 'DeveloperWorker'
       });
@@ -45,7 +46,7 @@ export class SwarmCoordinator {
     // 3. Check for Scheduling needs
     if (lowerTask.includes('schedule') || lowerTask.includes('cron') || lowerTask.includes('reminder')) {
       subTasks.push({
-        id: `task-${Math.random().toString(36).substring(2, 6)}-3`,
+        id: `${generateId('task', 4)}-3`,
         description: `Create scheduled cron jobs or timers: ${task}`,
         assignedWorker: 'SchedulerWorker'
       });
@@ -54,7 +55,7 @@ export class SwarmCoordinator {
     // Fallback: If no matches, coordinator handles directly
     if (subTasks.length === 0) {
       subTasks.push({
-        id: `task-${Math.random().toString(36).substring(2, 6)}-0`,
+        id: `${generateId('task', 4)}-0`,
         description: task,
         assignedWorker: 'CoordinatorAgent'
       });

@@ -12,7 +12,8 @@ import { getSecureLogger } from './services/logger.js';
 import { Telegraf } from 'telegraf';
 import path from 'node:path';
 import fs from 'node:fs';
-import { loadConfig, getSqliteManager, getVectorDbManager } from '@nova/shared';
+import { ensureDir, loadConfig, getSqliteManager, getVectorDbManager, Tenant } from '@nova/shared';
+import { sendWhatsAppCloudMessage } from './services/meta.js';
 import { getSessionManager } from './services/session.js';
 import { getSkillService } from './services/skills.js';
 import { getCronService } from './services/cron.js';
@@ -55,6 +56,29 @@ async function main() {
     }
   });
 
+  /**
+   * Validates the owner bearer token on a request, replying with 401 and
+   * returning null when it is missing, malformed, or expired.
+   */
+  const authenticateOwner = (request: any, reply: any): any | null => {
+    const authHeader = request.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      secureLogger.warn('Authorization failure: Missing or invalid token format', { headers: request.headers });
+      reply.status(401).send({ error: 'Unauthorized: Missing or invalid authorization token' });
+      return null;
+    }
+
+    const token = authHeader.split(' ')[1];
+    const decoded = verifyJwt(token);
+    if (!decoded || decoded.role !== 'owner') {
+      secureLogger.warn('Authorization failure: Expired or invalid signature token', { token });
+      reply.status(401).send({ error: 'Unauthorized: Access token is invalid or expired' });
+      return null;
+    }
+
+    return decoded;
+  };
+
   // JWT Authorization Guard for Admin Endpoints
   fastify.addHook('preHandler', async (request: any, reply) => {
     const url = request.url;
@@ -67,17 +91,9 @@ async function main() {
         return; // Allow public/auth endpoints
       }
 
-      const authHeader = request.headers.authorization;
-      if (!authHeader || !authHeader.startsWith('Bearer ')) {
-        return reply.status(401).send({ error: 'Unauthorized: Missing or invalid authorization token' });
-      }
-      
-      const token = authHeader.split(' ')[1];
-      const decoded = verifyJwt(token);
-      if (!decoded || decoded.role !== 'owner') {
-        return reply.status(401).send({ error: 'Unauthorized: Access token is invalid or expired' });
-      }
-      
+      const decoded = authenticateOwner(request, reply);
+      if (!decoded) return reply;
+
       request.user = decoded;
     }
   });
@@ -95,10 +111,55 @@ async function main() {
   startWhatsAppBot(sessionManager, heartbeatService);
 
   // Create public directory for serving widget client assets
-  const publicDir = path.join(process.cwd(), 'public');
-  if (!fs.existsSync(publicDir)) {
-    fs.mkdirSync(publicDir, { recursive: true });
-  }
+  const publicDir = ensureDir(path.join(process.cwd(), 'public'));
+
+  /**
+   * Builds a handler serving a file from the public directory, or 404 when the
+   * asset has not been built yet.
+   */
+  const servePublicFile = (fileName: string, missingError: string) =>
+    async (request: any, reply: any) => {
+      if (fs.existsSync(path.join(publicDir, fileName))) {
+        return reply.sendFile(fileName);
+      }
+      return reply.status(404).send({ error: missingError });
+    };
+
+  /**
+   * Loads a tenant for a webhook request, replying with the matching error when
+   * it is unknown, has the channel disabled, or has an inactive subscription.
+   */
+  const resolveWebhookTenant = (
+    request: any,
+    reply: any,
+    options: { requireChannel?: (tenant: Tenant) => boolean; missingError: string; requireActiveSubscription?: boolean }
+  ): Tenant | null => {
+    const tenant = getSqliteManager().getTenant(request.params.tenantId);
+
+    if (!tenant || (options.requireChannel && !options.requireChannel(tenant))) {
+      reply.status(404).send({ error: options.missingError });
+      return null;
+    }
+
+    if (options.requireActiveSubscription && tenant.stripeStatus !== 'active') {
+      reply.status(403).send({ error: 'Subscription past due' });
+      return null;
+    }
+
+    return tenant;
+  };
+
+  /**
+   * Answers the Meta-style webhook subscription handshake (`hub.*` query params).
+   */
+  const handleHubVerification = (request: any, reply: any, expectedToken: string, logLabel: string) => {
+    const { 'hub.mode': mode, 'hub.verify_token': token, 'hub.challenge': challenge } = request.query;
+    if (mode === 'subscribe' && token === expectedToken) {
+      console.log(`[${logLabel} Webhook verified for Tenant ${request.params.tenantId}]`);
+      return reply.send(challenge);
+    }
+    return reply.status(403).send({ error: 'Verification failed' });
+  };
 
   // Serve static public folder (which contains widget script and dashboard builds)
   await fastify.register(fastifyStatic, {
@@ -113,7 +174,7 @@ async function main() {
       reply.type('application/javascript');
       return fs.readFileSync(scriptPath, 'utf-8');
     }
-    reply.status(404).send({ error: 'Widget file not built yet. Run build process.' });
+    return reply.status(404).send({ error: 'Widget file not built yet. Run build process.' });
   });
 
   // API Route: Check Setup Status
@@ -290,17 +351,7 @@ async function main() {
 
   // API Route: Get Business Analytics overview (secured with JWT)
   fastify.get('/api/analytics/overview', async (request: any, reply) => {
-    const authHeader = request.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      secureLogger.warn('Authorization failure: Missing or invalid token format', { headers: request.headers });
-      return reply.status(401).send({ error: 'Unauthorized: Missing or invalid authorization token' });
-    }
-    const token = authHeader.split(' ')[1];
-    const decoded = verifyJwt(token);
-    if (!decoded || decoded.role !== 'owner') {
-      secureLogger.warn('Authorization failure: Expired or invalid signature token', { token });
-      return reply.status(401).send({ error: 'Unauthorized: Access token is invalid or expired' });
-    }
+    if (!authenticateOwner(request, reply)) return reply;
 
     try {
       const overview = computeAnalyticsOverview();
@@ -468,23 +519,11 @@ async function main() {
     `;
   });
 
-  const serveDashboard = async (request: any, reply: any) => {
-    const dashboardHtml = path.join(publicDir, 'dashboard.html');
-    if (fs.existsSync(dashboardHtml)) {
-      return reply.sendFile('dashboard.html');
-    }
-    reply.status(404).send({ error: 'Dashboard file not found' });
-  };
+  const serveDashboard = servePublicFile('dashboard.html', 'Dashboard file not found');
   fastify.get('/dashboard', serveDashboard);
   fastify.get('/dashboard.html', serveDashboard);
 
-  const serveTerms = async (request: any, reply: any) => {
-    const termsHtml = path.join(publicDir, 'terms.html');
-    if (fs.existsSync(termsHtml)) {
-      return reply.sendFile('terms.html');
-    }
-    reply.status(404).send({ error: 'Terms file not found' });
-  };
+  const serveTerms = servePublicFile('terms.html', 'Terms file not found');
   fastify.get('/terms', serveTerms);
   fastify.get('/terms.html', serveTerms);
 
@@ -596,16 +635,12 @@ async function main() {
   // Webhook: Telegram Multi-Tenant updates
   fastify.post('/webhooks/telegram/:tenantId', async (request: any, reply) => {
     const { tenantId } = request.params;
-    const sqliteDb = getSqliteManager();
-    const tenant = sqliteDb.getTenant(tenantId);
-
-    if (!tenant || !tenant.telegramEnabled || !tenant.telegramToken) {
-      return reply.status(404).send({ error: 'Tenant or Telegram channel not found' });
-    }
-
-    if (tenant.stripeStatus !== 'active') {
-      return reply.status(403).send({ error: 'Subscription past due' });
-    }
+    const tenant = resolveWebhookTenant(request, reply, {
+      requireChannel: t => Boolean(t.telegramEnabled && t.telegramToken),
+      missingError: 'Tenant or Telegram channel not found',
+      requireActiveSubscription: true,
+    });
+    if (!tenant) return reply;
 
     try {
       const bot = getOrCreateTelegramBot(tenantId, tenant.telegramToken, sessionManager);
@@ -619,38 +654,21 @@ async function main() {
 
   // Webhook: WhatsApp Cloud API GET Verification
   fastify.get('/webhooks/whatsapp/:tenantId', async (request: any, reply) => {
-    const { tenantId } = request.params;
-    const sqliteDb = getSqliteManager();
-    const tenant = sqliteDb.getTenant(tenantId);
+    const tenant = resolveWebhookTenant(request, reply, { missingError: 'Tenant not found' });
+    if (!tenant) return reply;
 
-    if (!tenant) {
-      return reply.status(404).send({ error: 'Tenant not found' });
-    }
-
-    const mode = request.query['hub.mode'];
-    const token = request.query['hub.verify_token'];
-    const challenge = request.query['hub.challenge'];
-
-    if (mode === 'subscribe' && token === (tenant.whatsappToken || 'nova_verify')) {
-      console.log(`[WhatsApp Webhook verified for Tenant ${tenantId}]`);
-      return reply.send(challenge);
-    }
-    return reply.status(403).send({ error: 'Verification failed' });
+    return handleHubVerification(request, reply, tenant.whatsappToken || 'nova_verify', 'WhatsApp');
   });
 
   // Webhook: WhatsApp Cloud API POST Messages
   fastify.post('/webhooks/whatsapp/:tenantId', async (request: any, reply) => {
     const { tenantId } = request.params;
-    const sqliteDb = getSqliteManager();
-    const tenant = sqliteDb.getTenant(tenantId);
-
-    if (!tenant || !tenant.whatsappEnabled) {
-      return reply.status(404).send({ error: 'Tenant or WhatsApp channel not active' });
-    }
-
-    if (tenant.stripeStatus !== 'active') {
-      return reply.status(403).send({ error: 'Subscription past due' });
-    }
+    const tenant = resolveWebhookTenant(request, reply, {
+      requireChannel: t => Boolean(t.whatsappEnabled),
+      missingError: 'Tenant or WhatsApp channel not active',
+      requireActiveSubscription: true,
+    });
+    if (!tenant) return reply;
 
     const body = request.body;
     if (body.object === 'whatsapp_business_account') {
@@ -681,17 +699,9 @@ async function main() {
   // Webhook: Instagram Verification (GET)
   fastify.get('/webhooks/instagram/:tenantId', async (request: any, reply) => {
     const { tenantId } = request.params;
-    const mode = request.query['hub.mode'];
-    const token = request.query['hub.verify_token'];
-    const challenge = request.query['hub.challenge'];
-
     const verifyToken = sqliteDb.getFact(`instagram_verify_token_${tenantId}`) || 'nova_verify';
 
-    if (mode === 'subscribe' && token === verifyToken) {
-      console.log(`[Instagram Webhook verified for Tenant ${tenantId}]`);
-      return reply.send(challenge);
-    }
-    return reply.status(403).send({ error: 'Verification failed' });
+    return handleHubVerification(request, reply, verifyToken, 'Instagram');
   });
 
   // Webhook: Instagram Cloud API POST Messages
@@ -800,19 +810,7 @@ async function main() {
       const sqliteDb = getSqliteManager();
       const tenant = sqliteDb.getTenant(tenantId);
       if (tenant && tenant.whatsappToken) {
-        // Meta Graph API send call
-        await fetch(`https://graph.facebook.com/v18.0/me/messages`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${tenant.whatsappToken}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            messaging_product: 'whatsapp',
-            to: fromNum,
-            text: { body: message }
-          })
-        });
+        await sendWhatsAppCloudMessage(tenant.whatsappToken, fromNum, message);
         console.log(`[Takeover] Sent manual WhatsApp reply to ${fromNum}`);
       }
     }

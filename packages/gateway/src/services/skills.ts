@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import chokidar from 'chokidar';
-import { loadConfig } from '@nova/shared';
+import { ensureDir, loadConfig, createSingleton } from '@nova/shared';
 
 export interface CustomSkill {
   name: string;
@@ -18,11 +18,7 @@ export class SkillService {
 
   constructor() {
     const config = loadConfig();
-    this.skillsDir = config.paths.skills;
-
-    if (!fs.existsSync(this.skillsDir)) {
-      fs.mkdirSync(this.skillsDir, { recursive: true });
-    }
+    this.skillsDir = ensureDir(config.paths.skills);
 
     this.loadAllSkills();
     this.setupWatcher();
@@ -45,11 +41,14 @@ export class SkillService {
     }
   }
 
+  private static skillNameFromPath(filePath: string): string {
+    return path.basename(filePath).replace('.md', '');
+  }
+
   private loadSkillFile(filePath: string) {
     try {
       const content = fs.readFileSync(filePath, 'utf-8');
-      const filename = path.basename(filePath);
-      const skillName = filename.replace('.md', '');
+      const skillName = SkillService.skillNameFromPath(filePath);
       
       const parsed = this.parseSkillMarkdown(skillName, content, filePath);
       this.skills.set(skillName, parsed);
@@ -110,23 +109,17 @@ export class SkillService {
     try {
       this.watcher = chokidar.watch(this.skillsDir, { ignoreInitial: true });
       
-      this.watcher.on('add', (filePath: string) => {
-        if (filePath.endsWith('.md')) {
-          console.log(`[Skills] New skill file detected: ${filePath}`);
-          this.loadSkillFile(filePath);
-        }
-      });
-
-      this.watcher.on('change', (filePath: string) => {
-        if (filePath.endsWith('.md')) {
-          console.log(`[Skills] Skill file changed: ${filePath}`);
-          this.loadSkillFile(filePath);
-        }
-      });
+      for (const event of ['add', 'change'] as const) {
+        this.watcher.on(event, (filePath: string) => {
+          if (filePath.endsWith('.md')) {
+            console.log(`[Skills] Skill file ${event === 'add' ? 'detected' : 'changed'}: ${filePath}`);
+            this.loadSkillFile(filePath);
+          }
+        });
+      }
 
       this.watcher.on('unlink', (filePath: string) => {
-        const filename = path.basename(filePath);
-        const skillName = filename.replace('.md', '');
+        const skillName = SkillService.skillNameFromPath(filePath);
         if (this.skills.delete(skillName)) {
           console.log(`[Skills] Removed skill: "${skillName}"`);
         }
@@ -165,10 +158,4 @@ export class SkillService {
 }
 
 // Single instance export
-let skillServiceInstance: SkillService | null = null;
-export function getSkillService(): SkillService {
-  if (!skillServiceInstance) {
-    skillServiceInstance = new SkillService();
-  }
-  return skillServiceInstance;
-}
+export const getSkillService = createSingleton(() => new SkillService());

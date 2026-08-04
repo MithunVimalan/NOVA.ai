@@ -1,6 +1,9 @@
-import fs from 'node:fs';
 import path from 'node:path';
 import { loadConfig } from '../config.js';
+import { ensureDir, readJsonFile, writeJsonFile } from '../utils/fs.js';
+import { createSingleton } from '../utils/singleton.js';
+
+const LOG_LABEL = '[Database]';
 
 export interface Fact {
   key: string;
@@ -61,15 +64,35 @@ export class SqliteManager {
 
   constructor() {
     const config = loadConfig();
-    this.memoryPath = config.paths.memory;
+    this.memoryPath = ensureDir(config.paths.memory);
     this.dbPath = path.join(this.memoryPath, 'nova.db');
 
-    // Ensure memory folder exists
-    if (!fs.existsSync(this.memoryPath)) {
-      fs.mkdirSync(this.memoryPath, { recursive: true });
-    }
-
     this.initializeDb();
+  }
+
+  /**
+   * Runs a SQLite statement, logging and returning the fallback value if the
+   * driver throws.
+   */
+  private run<T>(operation: string, action: () => T, fallback: T): T {
+    try {
+      return action();
+    } catch (e) {
+      console.error(`${LOG_LABEL} ${operation} failed:`, e);
+      return fallback;
+    }
+  }
+
+  private static mapTenantRow(row: any): Tenant {
+    return {
+      id: row.id,
+      name: row.name,
+      telegramEnabled: row.telegram_enabled,
+      telegramToken: row.telegram_token,
+      whatsappEnabled: row.whatsapp_enabled,
+      whatsappToken: row.whatsapp_token,
+      stripeStatus: row.stripe_status,
+    };
   }
 
   private initializeDb() {
@@ -79,11 +102,11 @@ export class SqliteManager {
       this.dbInstance = new Database(this.dbPath);
       this.dbInstance.pragma('journal_mode = WAL');
       this.setupTables();
-      console.log(`[Database] Initialized SQLite at ${this.dbPath} (WAL Mode enabled)`);
+      console.log(`${LOG_LABEL} Initialized SQLite at ${this.dbPath} (WAL Mode enabled)`);
     } catch (e) {
       this.isFallback = true;
       this.dbPath = path.join(this.memoryPath, 'nova_db_fallback.json');
-      console.warn(`[Database] Native SQLite not available. Falling back to local JSON: ${this.dbPath}`);
+      console.warn(`${LOG_LABEL} Native SQLite not available. Falling back to local JSON: ${this.dbPath}`);
       this.loadFallbackData();
     }
   }
@@ -134,45 +157,34 @@ export class SqliteManager {
 
   // FALLBACK JSON DATABASE SYSTEM
   private loadFallbackData() {
-    if (fs.existsSync(this.dbPath)) {
-      try {
-        const content = fs.readFileSync(this.dbPath, 'utf-8');
-        this.cache = JSON.parse(content);
-        if (!this.cache.facts) this.cache.facts = {};
-        if (!this.cache.visitors) this.cache.visitors = [];
-        if (!this.cache.leads) this.cache.leads = [];
-        if (!this.cache.tenants) this.cache.tenants = [];
-        if (!this.cache.sales) this.cache.sales = [];
-      } catch (err) {
-        console.error(`[Database] Error reading fallback DB file, resetting:`, err);
-      }
-    } else {
+    const stored = readJsonFile<Partial<typeof this.cache> | null>(this.dbPath, null, LOG_LABEL);
+    if (!stored) {
       this.saveFallbackData();
+      return;
     }
+
+    this.cache = {
+      facts: stored.facts ?? {},
+      visitors: stored.visitors ?? [],
+      leads: stored.leads ?? [],
+      tenants: stored.tenants ?? [],
+      sales: stored.sales ?? [],
+    };
   }
 
   private saveFallbackData() {
-    try {
-      fs.writeFileSync(this.dbPath, JSON.stringify(this.cache, null, 2), 'utf-8');
-    } catch (err) {
-      console.error(`[Database] Error writing fallback DB file:`, err);
-    }
+    writeJsonFile(this.dbPath, this.cache, LOG_LABEL);
   }
 
   // PROFILE FACTS OPERATIONS
   public getFact(key: string): string | null {
     if (this.isFallback) {
       return this.cache.facts[key]?.value || null;
-    } else {
-      try {
-        const stmt = this.dbInstance.prepare('SELECT value FROM facts WHERE key = ?');
-        const row = stmt.get(key);
-        return row ? row.value : null;
-      } catch (e) {
-        console.error(`[Database] getFact failed:`, e);
-        return null;
-      }
     }
+    return this.run('getFact', () => {
+      const row = this.dbInstance.prepare('SELECT value FROM facts WHERE key = ?').get(key);
+      return row ? row.value : null;
+    }, null);
   }
 
   public setFact(key: string, value: string): void {
@@ -180,18 +192,15 @@ export class SqliteManager {
     if (this.isFallback) {
       this.cache.facts[key] = { key, value, updatedAt: now };
       this.saveFallbackData();
-    } else {
-      try {
-        const stmt = this.dbInstance.prepare(`
-          INSERT INTO facts (key, value, updated_at) 
-          VALUES (?, ?, ?)
-          ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at
-        `);
-        stmt.run(key, value, now);
-      } catch (e) {
-        console.error(`[Database] setFact failed:`, e);
-      }
+      return;
     }
+    this.run('setFact', () => {
+      this.dbInstance.prepare(`
+        INSERT INTO facts (key, value, updated_at) 
+        VALUES (?, ?, ?)
+        ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at
+      `).run(key, value, now);
+    }, undefined);
   }
 
   public getAllFacts(): Record<string, string> {
@@ -200,18 +209,15 @@ export class SqliteManager {
       for (const [k, f] of Object.entries(this.cache.facts)) {
         result[k] = f.value;
       }
-    } else {
-      try {
-        const stmt = this.dbInstance.prepare('SELECT key, value FROM facts');
-        const rows = stmt.all() as { key: string; value: string }[];
-        for (const row of rows) {
-          result[row.key] = row.value;
-        }
-      } catch (e) {
-        console.error(`[Database] getAllFacts failed:`, e);
-      }
+      return result;
     }
-    return result;
+    return this.run('getAllFacts', () => {
+      const rows = this.dbInstance.prepare('SELECT key, value FROM facts').all() as { key: string; value: string }[];
+      for (const row of rows) {
+        result[row.key] = row.value;
+      }
+      return result;
+    }, result);
   }
 
   // VISITOR TRACKING OPERATIONS
@@ -225,31 +231,25 @@ export class SqliteManager {
       };
       this.cache.visitors.push(newEvent);
       this.saveFallbackData();
-    } else {
-      try {
-        const stmt = this.dbInstance.prepare(`
-          INSERT INTO visitors (session_id, page_url, referrer, scroll_depth, time_on_page, timestamp)
-          VALUES (?, ?, ?, ?, ?, ?)
-        `);
-        stmt.run(event.sessionId, event.pageUrl, event.referrer, event.scrollDepth, event.timeOnPage, timestamp);
-      } catch (e) {
-        console.error(`[Database] logVisitorEvent failed:`, e);
-      }
+      return;
     }
+    this.run('logVisitorEvent', () => {
+      this.dbInstance.prepare(`
+        INSERT INTO visitors (session_id, page_url, referrer, scroll_depth, time_on_page, timestamp)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `).run(event.sessionId, event.pageUrl, event.referrer, event.scrollDepth, event.timeOnPage, timestamp);
+    }, undefined);
   }
 
   public getVisitorLogs(): VisitorEvent[] {
     if (this.isFallback) {
       return [...this.cache.visitors].reverse();
-    } else {
-      try {
-        const stmt = this.dbInstance.prepare('SELECT * FROM visitors ORDER BY id DESC');
-        return stmt.all() as VisitorEvent[];
-      } catch (e) {
-        console.error(`[Database] getVisitorLogs failed:`, e);
-        return [];
-      }
     }
+    return this.run<VisitorEvent[]>(
+      'getVisitorLogs',
+      () => this.dbInstance.prepare('SELECT * FROM visitors ORDER BY id DESC').all() as VisitorEvent[],
+      []
+    );
   }
 
   // LEAD CONVERSION OPERATIONS
@@ -263,31 +263,25 @@ export class SqliteManager {
       };
       this.cache.leads.push(newLead);
       this.saveFallbackData();
-    } else {
-      try {
-        const stmt = this.dbInstance.prepare(`
-          INSERT INTO leads (session_id, name, email, captured_at)
-          VALUES (?, ?, ?, ?)
-        `);
-        stmt.run(lead.sessionId, lead.name, lead.email, capturedAt);
-      } catch (e) {
-        console.error(`[Database] addLead failed:`, e);
-      }
+      return;
     }
+    this.run('addLead', () => {
+      this.dbInstance.prepare(`
+        INSERT INTO leads (session_id, name, email, captured_at)
+        VALUES (?, ?, ?, ?)
+      `).run(lead.sessionId, lead.name, lead.email, capturedAt);
+    }, undefined);
   }
 
   public getLeads(): Lead[] {
     if (this.isFallback) {
       return [...this.cache.leads].reverse();
-    } else {
-      try {
-        const stmt = this.dbInstance.prepare('SELECT * FROM leads ORDER BY id DESC');
-        return stmt.all() as Lead[];
-      } catch (e) {
-        console.error(`[Database] getLeads failed:`, e);
-        return [];
-      }
     }
+    return this.run<Lead[]>(
+      'getLeads',
+      () => this.dbInstance.prepare('SELECT * FROM leads ORDER BY id DESC').all() as Lead[],
+      []
+    );
   }
 
   // TENANT OPERATIONS
@@ -301,80 +295,50 @@ export class SqliteManager {
         this.cache.tenants.push(tenant);
       }
       this.saveFallbackData();
-    } else {
-      try {
-        const stmt = this.dbInstance.prepare(`
-          INSERT INTO tenants (id, name, telegram_enabled, telegram_token, whatsapp_enabled, whatsapp_token, stripe_status)
-          VALUES (?, ?, ?, ?, ?, ?, ?)
-          ON CONFLICT(id) DO UPDATE SET 
-            name=excluded.name,
-            telegram_enabled=excluded.telegram_enabled,
-            telegram_token=excluded.telegram_token,
-            whatsapp_enabled=excluded.whatsapp_enabled,
-            whatsapp_token=excluded.whatsapp_token,
-            stripe_status=excluded.stripe_status
-        `);
-        stmt.run(
-          tenant.id,
-          tenant.name,
-          tenant.telegramEnabled,
-          tenant.telegramToken,
-          tenant.whatsappEnabled,
-          tenant.whatsappToken,
-          tenant.stripeStatus
-        );
-      } catch (e) {
-        console.error(`[Database] addTenant failed:`, e);
-      }
+      return;
     }
+    this.run('addTenant', () => {
+      this.dbInstance.prepare(`
+        INSERT INTO tenants (id, name, telegram_enabled, telegram_token, whatsapp_enabled, whatsapp_token, stripe_status)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET 
+          name=excluded.name,
+          telegram_enabled=excluded.telegram_enabled,
+          telegram_token=excluded.telegram_token,
+          whatsapp_enabled=excluded.whatsapp_enabled,
+          whatsapp_token=excluded.whatsapp_token,
+          stripe_status=excluded.stripe_status
+      `).run(
+        tenant.id,
+        tenant.name,
+        tenant.telegramEnabled,
+        tenant.telegramToken,
+        tenant.whatsappEnabled,
+        tenant.whatsappToken,
+        tenant.stripeStatus
+      );
+    }, undefined);
   }
 
   public getTenant(id: string): Tenant | null {
     if (this.isFallback) {
       this.cache.tenants = this.cache.tenants || [];
       return this.cache.tenants.find(t => t.id === id) || null;
-    } else {
-      try {
-        const stmt = this.dbInstance.prepare('SELECT * FROM tenants WHERE id = ?');
-        const row = stmt.get(id);
-        if (!row) return null;
-        return {
-          id: row.id,
-          name: row.name,
-          telegramEnabled: row.telegram_enabled,
-          telegramToken: row.telegram_token,
-          whatsappEnabled: row.whatsapp_enabled,
-          whatsappToken: row.whatsapp_token,
-          stripeStatus: row.stripe_status
-        };
-      } catch (e) {
-        console.error(`[Database] getTenant failed:`, e);
-        return null;
-      }
     }
+    return this.run<Tenant | null>('getTenant', () => {
+      const row = this.dbInstance.prepare('SELECT * FROM tenants WHERE id = ?').get(id);
+      return row ? SqliteManager.mapTenantRow(row) : null;
+    }, null);
   }
 
   public getAllTenants(): Tenant[] {
     if (this.isFallback) {
       return this.cache.tenants || [];
-    } else {
-      try {
-        const stmt = this.dbInstance.prepare('SELECT * FROM tenants');
-        const rows = stmt.all() as any[];
-        return rows.map(row => ({
-          id: row.id,
-          name: row.name,
-          telegramEnabled: row.telegram_enabled,
-          telegramToken: row.telegram_token,
-          whatsappEnabled: row.whatsapp_enabled,
-          whatsappToken: row.whatsapp_token,
-          stripeStatus: row.stripe_status
-        }));
-      } catch (e) {
-        console.error(`[Database] getAllTenants failed:`, e);
-        return [];
-      }
     }
+    return this.run<Tenant[]>('getAllTenants', () => {
+      const rows = this.dbInstance.prepare('SELECT * FROM tenants').all() as any[];
+      return rows.map(SqliteManager.mapTenantRow);
+    }, []);
   }
 
   // SALES TRACKING OPERATIONS
@@ -389,57 +353,41 @@ export class SqliteManager {
       };
       this.cache.sales.push(newSale);
       this.saveFallbackData();
-    } else {
-      try {
-        const stmt = this.dbInstance.prepare(`
-          INSERT INTO sales_logs (product_id, revenue, customer, timestamp)
-          VALUES (?, ?, ?, ?)
-        `);
-        stmt.run(sale.productId, sale.revenue, sale.customer, timestamp);
-      } catch (e) {
-        console.error(`[Database] logSale failed:`, e);
-      }
+      return;
     }
+    this.run('logSale', () => {
+      this.dbInstance.prepare(`
+        INSERT INTO sales_logs (product_id, revenue, customer, timestamp)
+        VALUES (?, ?, ?, ?)
+      `).run(sale.productId, sale.revenue, sale.customer, timestamp);
+    }, undefined);
   }
 
   public getSalesLogs(): SalesLog[] {
     if (this.isFallback) {
       return [...(this.cache.sales || [])].reverse();
-    } else {
-      try {
-        const stmt = this.dbInstance.prepare('SELECT * FROM sales_logs ORDER BY timestamp DESC');
-        const rows = stmt.all() as any[];
-        return rows.map(r => ({
-          id: r.id,
-          productId: r.product_id,
-          revenue: r.revenue,
-          customer: r.customer,
-          timestamp: r.timestamp,
-        }));
-      } catch (e) {
-        console.error(`[Database] getSalesLogs failed:`, e);
-        return [];
-      }
     }
+    return this.run<SalesLog[]>('getSalesLogs', () => {
+      const rows = this.dbInstance.prepare('SELECT * FROM sales_logs ORDER BY timestamp DESC').all() as any[];
+      return rows.map(r => ({
+        id: r.id,
+        productId: r.product_id,
+        revenue: r.revenue,
+        customer: r.customer,
+        timestamp: r.timestamp,
+      }));
+    }, []);
   }
 
   public close(): void {
     if (!this.isFallback && this.dbInstance) {
-      try {
+      this.run('close', () => {
         this.dbInstance.close();
-        console.log('[Database] SQLite database connection closed cleanly.');
-      } catch (e) {
-        console.error('[Database] Failed to close SQLite database connection:', e);
-      }
+        console.log(`${LOG_LABEL} SQLite database connection closed cleanly.`);
+      }, undefined);
     }
   }
 }
 
 // Single instance exports
-let sqliteManagerInstance: SqliteManager | null = null;
-export function getSqliteManager(): SqliteManager {
-  if (!sqliteManagerInstance) {
-    sqliteManagerInstance = new SqliteManager();
-  }
-  return sqliteManagerInstance;
-}
+export const getSqliteManager = createSingleton(() => new SqliteManager());

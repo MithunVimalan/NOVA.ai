@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { executeTool } from './tools.js';
-import { getVectorDbManager } from '@nova/shared';
+import { generateId, getVectorDbManager, createSingleton, walkFiles } from '@nova/shared';
 
 export interface PendingAction {
   id: string;
@@ -25,7 +25,7 @@ export class CopilotService {
    */
   async requestActionExecution(sessionId: string, tool: string, args: any): Promise<ActionResult> {
     if (this.criticalTools.includes(tool)) {
-      const actionId = 'act-' + Math.random().toString(36).substring(2, 9) + '-' + Date.now();
+      const actionId = generateId('act', 7);
       const actions = this.pendingActions.get(sessionId) || [];
       
       const newAction: PendingAction = {
@@ -99,37 +99,17 @@ export class CopilotService {
     const vectorDb = getVectorDbManager();
     let count = 0;
 
-    const traverseDir = async (currentDir: string) => {
-      const items = fs.readdirSync(currentDir);
-      for (const item of items) {
-        const fullPath = path.join(currentDir, item);
-        const stat = fs.statSync(fullPath);
-
-        if (stat.isDirectory()) {
-          // Skip node_modules and .git folders
-          if (item === 'node_modules' || item === '.git' || item === 'dist') continue;
-          await traverseDir(fullPath);
-        } else if (stat.isFile()) {
-          const ext = path.extname(item).toLowerCase();
-          // Filter plain-text extensions
-          if (['.txt', '.md', '.json', '.csv', '.html', '.js', '.ts'].includes(ext)) {
-            try {
-              const text = fs.readFileSync(fullPath, 'utf-8');
-              if (text.trim()) {
-                const relPath = path.relative(folderPath, fullPath);
-                await vectorDb.addCatalogDoc(text, { source: relPath });
-                count++;
-              }
-            } catch (err: any) {
-              console.warn(`[Copilot Scanner] Failed to read ${fullPath}:`, err.message);
-            }
-          }
+    const textExtensions = ['.txt', '.md', '.json', '.csv', '.html', '.js', '.ts'];
+    for (const filePath of walkFiles(folderPath, { extensions: textExtensions })) {
+      try {
+        const text = fs.readFileSync(filePath, 'utf-8');
+        if (text.trim()) {
+          await vectorDb.addCatalogDoc(text, { source: path.relative(folderPath, filePath) });
+          count++;
         }
+      } catch (err: any) {
+        console.warn(`[Copilot Scanner] Failed to read ${filePath}:`, err.message);
       }
-    };
-
-    if (fs.existsSync(folderPath)) {
-      await traverseDir(folderPath);
     }
 
     return {
@@ -139,10 +119,4 @@ export class CopilotService {
   }
 }
 
-let copilotServiceInstance: CopilotService | null = null;
-export function getCopilotService(): CopilotService {
-  if (!copilotServiceInstance) {
-    copilotServiceInstance = new CopilotService();
-  }
-  return copilotServiceInstance;
-}
+export const getCopilotService = createSingleton(() => new CopilotService());
