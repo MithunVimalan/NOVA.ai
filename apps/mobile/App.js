@@ -80,6 +80,7 @@ export default function App() {
         setAnalytics(mockAnalytics);
       }
     } catch (e) {
+      console.warn('[NOVA Mobile] Failed to load dashboard data, showing sample data:', e);
       setSessions(mockSessions);
       setAnalytics(mockAnalytics);
     }
@@ -104,7 +105,9 @@ export default function App() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ tenantId, token: 'mobile-fcm-token-sandbox-123' })
-      }).catch(() => {});
+      }).catch((err) => {
+        console.warn('[NOVA Mobile] Push notification registration failed:', err);
+      });
 
     } catch (err) {
       Alert.alert('Login Failed', err.message);

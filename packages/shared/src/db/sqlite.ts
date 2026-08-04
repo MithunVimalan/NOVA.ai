@@ -144,7 +144,19 @@ export class SqliteManager {
         if (!this.cache.tenants) this.cache.tenants = [];
         if (!this.cache.sales) this.cache.sales = [];
       } catch (err) {
-        console.error(`[Database] Error reading fallback DB file, resetting:`, err);
+        console.error(`[Database] Fallback DB file is unreadable or corrupt, resetting to an empty database:`, err);
+        this.cache = { facts: {}, visitors: [], leads: [], tenants: [], sales: [] };
+        const backupPath = `${this.dbPath}.corrupt-${Date.now()}`;
+        try {
+          fs.renameSync(this.dbPath, backupPath);
+          console.warn(`[Database] Preserved the corrupt fallback DB at ${backupPath}`);
+        } catch (backupErr) {
+          throw new Error(
+            `[Database] Fallback DB at ${this.dbPath} is corrupt and could not be moved aside: ${(backupErr as Error).message}`,
+            { cause: backupErr }
+          );
+        }
+        this.saveFallbackData();
       }
     } else {
       this.saveFallbackData();
@@ -155,7 +167,19 @@ export class SqliteManager {
     try {
       fs.writeFileSync(this.dbPath, JSON.stringify(this.cache, null, 2), 'utf-8');
     } catch (err) {
-      console.error(`[Database] Error writing fallback DB file:`, err);
+      throw new Error(`[Database] Failed to persist fallback DB to ${this.dbPath}: ${(err as Error).message}`, { cause: err });
+    }
+  }
+
+  /**
+   * Runs a native SQLite operation, rethrowing failures with context so callers
+   * can distinguish a database error from an empty result.
+   */
+  private run<T>(label: string, operation: () => T): T {
+    try {
+      return operation();
+    } catch (err) {
+      throw new Error(`[Database] ${label} failed: ${(err as Error).message}`, { cause: err });
     }
   }
 
@@ -164,14 +188,11 @@ export class SqliteManager {
     if (this.isFallback) {
       return this.cache.facts[key]?.value || null;
     } else {
-      try {
+      return this.run('getFact', () => {
         const stmt = this.dbInstance.prepare('SELECT value FROM facts WHERE key = ?');
         const row = stmt.get(key);
         return row ? row.value : null;
-      } catch (e) {
-        console.error(`[Database] getFact failed:`, e);
-        return null;
-      }
+      });
     }
   }
 
@@ -181,16 +202,14 @@ export class SqliteManager {
       this.cache.facts[key] = { key, value, updatedAt: now };
       this.saveFallbackData();
     } else {
-      try {
+      this.run('setFact', () => {
         const stmt = this.dbInstance.prepare(`
           INSERT INTO facts (key, value, updated_at) 
           VALUES (?, ?, ?)
           ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at
         `);
         stmt.run(key, value, now);
-      } catch (e) {
-        console.error(`[Database] setFact failed:`, e);
-      }
+      });
     }
   }
 
@@ -201,14 +220,11 @@ export class SqliteManager {
         result[k] = f.value;
       }
     } else {
-      try {
-        const stmt = this.dbInstance.prepare('SELECT key, value FROM facts');
-        const rows = stmt.all() as { key: string; value: string }[];
-        for (const row of rows) {
-          result[row.key] = row.value;
-        }
-      } catch (e) {
-        console.error(`[Database] getAllFacts failed:`, e);
+      const rows = this.run('getAllFacts', () =>
+        this.dbInstance.prepare('SELECT key, value FROM facts').all() as { key: string; value: string }[]
+      );
+      for (const row of rows) {
+        result[row.key] = row.value;
       }
     }
     return result;
@@ -226,15 +242,13 @@ export class SqliteManager {
       this.cache.visitors.push(newEvent);
       this.saveFallbackData();
     } else {
-      try {
+      this.run('logVisitorEvent', () => {
         const stmt = this.dbInstance.prepare(`
           INSERT INTO visitors (session_id, page_url, referrer, scroll_depth, time_on_page, timestamp)
           VALUES (?, ?, ?, ?, ?, ?)
         `);
         stmt.run(event.sessionId, event.pageUrl, event.referrer, event.scrollDepth, event.timeOnPage, timestamp);
-      } catch (e) {
-        console.error(`[Database] logVisitorEvent failed:`, e);
-      }
+      });
     }
   }
 
@@ -242,13 +256,9 @@ export class SqliteManager {
     if (this.isFallback) {
       return [...this.cache.visitors].reverse();
     } else {
-      try {
-        const stmt = this.dbInstance.prepare('SELECT * FROM visitors ORDER BY id DESC');
-        return stmt.all() as VisitorEvent[];
-      } catch (e) {
-        console.error(`[Database] getVisitorLogs failed:`, e);
-        return [];
-      }
+      return this.run('getVisitorLogs', () =>
+        this.dbInstance.prepare('SELECT * FROM visitors ORDER BY id DESC').all() as VisitorEvent[]
+      );
     }
   }
 
@@ -264,15 +274,13 @@ export class SqliteManager {
       this.cache.leads.push(newLead);
       this.saveFallbackData();
     } else {
-      try {
+      this.run('addLead', () => {
         const stmt = this.dbInstance.prepare(`
           INSERT INTO leads (session_id, name, email, captured_at)
           VALUES (?, ?, ?, ?)
         `);
         stmt.run(lead.sessionId, lead.name, lead.email, capturedAt);
-      } catch (e) {
-        console.error(`[Database] addLead failed:`, e);
-      }
+      });
     }
   }
 
@@ -280,13 +288,9 @@ export class SqliteManager {
     if (this.isFallback) {
       return [...this.cache.leads].reverse();
     } else {
-      try {
-        const stmt = this.dbInstance.prepare('SELECT * FROM leads ORDER BY id DESC');
-        return stmt.all() as Lead[];
-      } catch (e) {
-        console.error(`[Database] getLeads failed:`, e);
-        return [];
-      }
+      return this.run('getLeads', () =>
+        this.dbInstance.prepare('SELECT * FROM leads ORDER BY id DESC').all() as Lead[]
+      );
     }
   }
 
@@ -302,7 +306,7 @@ export class SqliteManager {
       }
       this.saveFallbackData();
     } else {
-      try {
+      this.run('addTenant', () => {
         const stmt = this.dbInstance.prepare(`
           INSERT INTO tenants (id, name, telegram_enabled, telegram_token, whatsapp_enabled, whatsapp_token, stripe_status)
           VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -323,9 +327,7 @@ export class SqliteManager {
           tenant.whatsappToken,
           tenant.stripeStatus
         );
-      } catch (e) {
-        console.error(`[Database] addTenant failed:`, e);
-      }
+      });
     }
   }
 
@@ -334,7 +336,7 @@ export class SqliteManager {
       this.cache.tenants = this.cache.tenants || [];
       return this.cache.tenants.find(t => t.id === id) || null;
     } else {
-      try {
+      return this.run('getTenant', () => {
         const stmt = this.dbInstance.prepare('SELECT * FROM tenants WHERE id = ?');
         const row = stmt.get(id);
         if (!row) return null;
@@ -347,10 +349,7 @@ export class SqliteManager {
           whatsappToken: row.whatsapp_token,
           stripeStatus: row.stripe_status
         };
-      } catch (e) {
-        console.error(`[Database] getTenant failed:`, e);
-        return null;
-      }
+      });
     }
   }
 
@@ -358,9 +357,8 @@ export class SqliteManager {
     if (this.isFallback) {
       return this.cache.tenants || [];
     } else {
-      try {
-        const stmt = this.dbInstance.prepare('SELECT * FROM tenants');
-        const rows = stmt.all() as any[];
+      return this.run('getAllTenants', () => {
+        const rows = this.dbInstance.prepare('SELECT * FROM tenants').all() as any[];
         return rows.map(row => ({
           id: row.id,
           name: row.name,
@@ -370,10 +368,7 @@ export class SqliteManager {
           whatsappToken: row.whatsapp_token,
           stripeStatus: row.stripe_status
         }));
-      } catch (e) {
-        console.error(`[Database] getAllTenants failed:`, e);
-        return [];
-      }
+      });
     }
   }
 
@@ -390,15 +385,13 @@ export class SqliteManager {
       this.cache.sales.push(newSale);
       this.saveFallbackData();
     } else {
-      try {
+      this.run('logSale', () => {
         const stmt = this.dbInstance.prepare(`
           INSERT INTO sales_logs (product_id, revenue, customer, timestamp)
           VALUES (?, ?, ?, ?)
         `);
         stmt.run(sale.productId, sale.revenue, sale.customer, timestamp);
-      } catch (e) {
-        console.error(`[Database] logSale failed:`, e);
-      }
+      });
     }
   }
 
@@ -406,9 +399,8 @@ export class SqliteManager {
     if (this.isFallback) {
       return [...(this.cache.sales || [])].reverse();
     } else {
-      try {
-        const stmt = this.dbInstance.prepare('SELECT * FROM sales_logs ORDER BY timestamp DESC');
-        const rows = stmt.all() as any[];
+      return this.run('getSalesLogs', () => {
+        const rows = this.dbInstance.prepare('SELECT * FROM sales_logs ORDER BY timestamp DESC').all() as any[];
         return rows.map(r => ({
           id: r.id,
           productId: r.product_id,
@@ -416,10 +408,7 @@ export class SqliteManager {
           customer: r.customer,
           timestamp: r.timestamp,
         }));
-      } catch (e) {
-        console.error(`[Database] getSalesLogs failed:`, e);
-        return [];
-      }
+      });
     }
   }
 

@@ -51,7 +51,19 @@ export class VectorDbManager {
         const content = fs.readFileSync(this.indexPath, 'utf-8');
         this.index = JSON.parse(content);
       } catch (err) {
-        console.error(`[VectorDB] Error reading vector file, resetting:`, err);
+        console.error(`[VectorDB] Vector file at ${this.indexPath} is unreadable or corrupt, resetting the index:`, err);
+        this.index = [];
+        const backupPath = `${this.indexPath}.corrupt-${Date.now()}`;
+        try {
+          fs.renameSync(this.indexPath, backupPath);
+          console.warn(`[VectorDB] Preserved the corrupt vector file at ${backupPath}`);
+        } catch (backupErr) {
+          throw new Error(
+            `[VectorDB] Vector file at ${this.indexPath} is corrupt and could not be moved aside: ${(backupErr as Error).message}`,
+            { cause: backupErr }
+          );
+        }
+        this.saveIndex();
       }
     }
   }
@@ -60,7 +72,7 @@ export class VectorDbManager {
     try {
       fs.writeFileSync(this.indexPath, JSON.stringify(this.index, null, 2), 'utf-8');
     } catch (err) {
-      console.error(`[VectorDB] Error saving vector file:`, err);
+      throw new Error(`[VectorDB] Failed to persist vector file to ${this.indexPath}: ${(err as Error).message}`, { cause: err });
     }
   }
 
@@ -86,6 +98,7 @@ export class VectorDbManager {
       const data = await response.json() as { embedding: number[] };
       return data.embedding;
     } catch (e) {
+      console.warn(`[VectorDB] Embedding request to ${url} failed, using deterministic offline embedding:`, (e as Error).message);
       // Fallback: Generate a simple deterministic pseudo-embedding vector of 128 elements in case Ollama is offline
       // This is crucial for local testing without pulling/running Ollama models immediately!
       // Simple hash-based embedding
@@ -273,16 +286,8 @@ export class VectorDbManager {
 
   // Clear RAG catalog to re-index
   public clearCatalog(): void {
-    if (this.isFallback) {
-      this.index = this.index.filter(r => r.table !== 'catalog');
-      this.saveIndex();
-    } else {
-      try {
-        // Simple fallback to clear it in cache too
-        this.index = this.index.filter(r => r.table !== 'catalog');
-        this.saveIndex();
-      } catch {}
-    }
+    this.index = this.index.filter(r => r.table !== 'catalog');
+    this.saveIndex();
   }
 }
 

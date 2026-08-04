@@ -173,34 +173,38 @@ async function main() {
       if (res.ok) {
         ollamaStatus = 'active';
       }
-    } catch {
-      // Offline
+    } catch (err: any) {
+      console.warn('[Health] Ollama check failed:', err?.message ?? err);
     }
 
     let sqliteStatus = 'offline';
+    let sqliteError = '';
     try {
       sqliteDb.getFact('owner_password_hash');
       sqliteStatus = 'active';
-    } catch {
-      // Offline
+    } catch (err: any) {
+      sqliteError = err?.message ?? String(err);
+      console.error('[Health] SQLite check failed:', err);
     }
 
     let vectorDbStatus = 'offline';
+    let vectorDbError = '';
     try {
       await vectorDb.searchCatalog('test', 1);
       vectorDbStatus = 'active';
-    } catch {
-      vectorDbStatus = 'active';
+    } catch (err: any) {
+      vectorDbError = err?.message ?? String(err);
+      console.error('[Health] Vector DB check failed:', err);
     }
 
     const isSecurityHardened = process.env.JWT_SECRET !== undefined && process.env.JWT_SECRET !== 'nova_default_super_secret_key_12345';
 
     return {
-      status: (ollamaStatus === 'active' && sqliteStatus === 'active') ? 'healthy' : 'degraded',
+      status: (ollamaStatus === 'active' && sqliteStatus === 'active' && vectorDbStatus === 'active') ? 'healthy' : 'degraded',
       checks: {
         ollama: { status: ollamaStatus, message: ollamaStatus === 'active' ? 'Ollama running locally' : 'Ollama connection failed' },
-        sqlite: { status: sqliteStatus, message: sqliteStatus === 'active' ? 'SQLite initialized & writable' : 'SQLite DB failed' },
-        vectorDb: { status: vectorDbStatus, message: 'LanceDB / Memory Vector Store running' },
+        sqlite: { status: sqliteStatus, message: sqliteStatus === 'active' ? 'SQLite initialized & writable' : `SQLite DB failed: ${sqliteError}` },
+        vectorDb: { status: vectorDbStatus, message: vectorDbStatus === 'active' ? 'LanceDB / Memory Vector Store running' : `Vector store failed: ${vectorDbError}` },
         security: {
           status: isSecurityHardened ? 'hardened' : 'default_credentials',
           message: isSecurityHardened ? 'Custom JWT_SECRET active' : 'Using default JWT_SECRET (Recommended: set JWT_SECRET env var)'
@@ -895,4 +899,5 @@ async function main() {
 
 main().catch(err => {
   console.error('[Gateway] Fatal error in server startup:', err);
+  process.exit(1);
 });

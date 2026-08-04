@@ -429,7 +429,9 @@
         timeOnPage,
         ...customData
       })
-    }).catch(() => {});
+    }).catch((err) => {
+      console.warn('[NOVA Widget] Visitor tracking request failed:', err);
+    });
   }
 
   trackEvent();

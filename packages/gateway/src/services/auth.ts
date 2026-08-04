@@ -64,7 +64,8 @@ export function verifyJwt(token: string): any {
       return null; // Token expired
     }
     return decodedPayload;
-  } catch {
+  } catch (err) {
+    console.warn('[Auth] Rejected malformed JWT:', err instanceof Error ? err.message : err);
     return null;
   }
 }
@@ -76,7 +77,10 @@ export async function hashPassword(password: string): Promise<string> {
   const salt = crypto.randomBytes(16).toString('hex');
   return new Promise((resolve, reject) => {
     crypto.scrypt(password, salt, 64, (err, derivedKey) => {
-      if (err) reject(err);
+      if (err) {
+        reject(err);
+        return;
+      }
       resolve(`${salt}:${derivedKey.toString('hex')}`);
     });
   });
@@ -86,16 +90,17 @@ export async function hashPassword(password: string): Promise<string> {
  * Verifies a password against a scrypt-derived hash
  */
 export async function verifyPassword(password: string, hash: string): Promise<boolean> {
-  try {
-    const [salt, key] = hash.split(':');
-    if (!salt || !key) return false;
-    return new Promise((resolve) => {
-      crypto.scrypt(password, salt, 64, (err, derivedKey) => {
-        if (err) resolve(false);
-        resolve(derivedKey.toString('hex') === key);
-      });
+  const [salt, key] = hash.split(':');
+  if (!salt || !key) return false;
+  const expected = Buffer.from(key, 'hex');
+  if (expected.length !== 64) return false;
+  return new Promise((resolve, reject) => {
+    crypto.scrypt(password, salt, 64, (err, derivedKey) => {
+      if (err) {
+        reject(err);
+        return;
+      }
+      resolve(crypto.timingSafeEqual(derivedKey, expected));
     });
-  } catch {
-    return false;
-  }
+  });
 }
