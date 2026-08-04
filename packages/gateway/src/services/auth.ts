@@ -2,12 +2,24 @@ import crypto from 'node:crypto';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'nova_default_super_secret_key_12345';
 
-function base64UrlEncode(str: string): string {
-  return Buffer.from(str)
-    .toString('base64')
+function toBase64Url(base64: string): string {
+  return base64
     .replace(/=/g, '')
     .replace(/\+/g, '-')
     .replace(/\//g, '_');
+}
+
+function base64UrlEncode(str: string): string {
+  return toBase64Url(Buffer.from(str).toString('base64'));
+}
+
+function signSegments(encodedHeader: string, encodedPayload: string): string {
+  return toBase64Url(
+    crypto
+      .createHmac('sha256', JWT_SECRET)
+      .update(`${encodedHeader}.${encodedPayload}`)
+      .digest('base64')
+  );
 }
 
 function base64UrlDecode(str: string): string {
@@ -27,13 +39,7 @@ export function generateJwt(payload: any, expiresInSeconds: number = 86400): str
   const encodedHeader = base64UrlEncode(JSON.stringify(header));
   const encodedPayload = base64UrlEncode(JSON.stringify(fullPayload));
 
-  const signature = crypto
-    .createHmac('sha256', JWT_SECRET)
-    .update(`${encodedHeader}.${encodedPayload}`)
-    .digest('base64')
-    .replace(/=/g, '')
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_');
+  const signature = signSegments(encodedHeader, encodedPayload);
 
   return `${encodedHeader}.${encodedPayload}.${signature}`;
 }
@@ -47,13 +53,7 @@ export function verifyJwt(token: string): any {
     if (parts.length !== 3) return null;
 
     const [header, payload, signature] = parts;
-    const expectedSignature = crypto
-      .createHmac('sha256', JWT_SECRET)
-      .update(`${header}.${payload}`)
-      .digest('base64')
-      .replace(/=/g, '')
-      .replace(/\+/g, '-')
-      .replace(/\//g, '_');
+    const expectedSignature = signSegments(header, payload);
 
     if (signature !== expectedSignature) {
       return null;
@@ -74,10 +74,14 @@ export function verifyJwt(token: string): any {
  */
 export async function hashPassword(password: string): Promise<string> {
   const salt = crypto.randomBytes(16).toString('hex');
+  return `${salt}:${await deriveKey(password, salt)}`;
+}
+
+function deriveKey(password: string, salt: string): Promise<string> {
   return new Promise((resolve, reject) => {
     crypto.scrypt(password, salt, 64, (err, derivedKey) => {
       if (err) reject(err);
-      resolve(`${salt}:${derivedKey.toString('hex')}`);
+      else resolve(derivedKey.toString('hex'));
     });
   });
 }
@@ -89,12 +93,7 @@ export async function verifyPassword(password: string, hash: string): Promise<bo
   try {
     const [salt, key] = hash.split(':');
     if (!salt || !key) return false;
-    return new Promise((resolve) => {
-      crypto.scrypt(password, salt, 64, (err, derivedKey) => {
-        if (err) resolve(false);
-        resolve(derivedKey.toString('hex') === key);
-      });
-    });
+    return (await deriveKey(password, salt)) === key;
   } catch {
     return false;
   }

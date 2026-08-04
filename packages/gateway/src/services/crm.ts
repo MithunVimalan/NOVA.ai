@@ -1,3 +1,5 @@
+import { bearerJsonHeaders, createSingleton, requestJson } from '@nova/shared';
+
 export class CrmService {
   private hubspotToken: string = process.env.HUBSPOT_ACCESS_TOKEN || '';
 
@@ -18,30 +20,21 @@ export class CrmService {
     const lastName = nameParts.slice(1).join(' ') || '';
 
     try {
-      const response = await fetch('https://api.hubapi.com/crm/v3/objects/contacts', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${this.hubspotToken}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
+      await requestJson('https://api.hubapi.com/crm/v3/objects/contacts', {
+        label: 'HubSpot API',
+        headers: bearerJsonHeaders(this.hubspotToken),
+        body: {
           properties: {
             email: email,
             firstname: firstName,
             lastname: lastName,
             leadsource: 'NOVA Engage Widget',
           },
-        }),
+        },
       });
 
-      if (response.ok) {
-        console.log(`[CRM Service] Successfully synced lead "${name}" to HubSpot.`);
-        return true;
-      } else {
-        const errorText = await response.text();
-        console.error(`[CRM Service] HubSpot API returned status ${response.status}: ${errorText}`);
-        return false;
-      }
+      console.log(`[CRM Service] Successfully synced lead "${name}" to HubSpot.`);
+      return true;
     } catch (err: any) {
       console.error(`[CRM Service] Failed to sync contact with HubSpot CRM:`, err.message);
       return false;
@@ -49,10 +42,4 @@ export class CrmService {
   }
 }
 
-let crmServiceInstance: CrmService | null = null;
-export function getCrmService(): CrmService {
-  if (!crmServiceInstance) {
-    crmServiceInstance = new CrmService();
-  }
-  return crmServiceInstance;
-}
+export const getCrmService = createSingleton(() => new CrmService());

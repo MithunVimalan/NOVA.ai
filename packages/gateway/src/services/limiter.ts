@@ -1,3 +1,6 @@
+import { createSingleton } from '@nova/shared';
+import { createRedisClient } from './redis.js';
+
 export class RateLimiter {
   private inMemoryCache: Map<string, number[]> = new Map();
   private redisClient: any = null;
@@ -7,17 +10,7 @@ export class RateLimiter {
   }
 
   private async initializeRedis() {
-    const redisUrl = process.env.REDIS_URL;
-    if (redisUrl) {
-      try {
-        const IoRedisClass = (await import('ioredis')).default;
-        const RedisConstructor: any = (IoRedisClass as any).Redis || IoRedisClass;
-        this.redisClient = new RedisConstructor(redisUrl, { maxRetriesPerRequest: 3 });
-        console.log('[RateLimiter] Connected to Redis for rate limiting.');
-      } catch (err: any) {
-        console.warn('[RateLimiter] Failed to load ioredis, falling back to local memory.', err.message);
-      }
-    }
+    this.redisClient = await createRedisClient('[RateLimiter]', { maxRetriesPerRequest: 3 });
   }
 
   /**
@@ -67,10 +60,4 @@ export class RateLimiter {
   }
 }
 
-let rateLimiterInstance: RateLimiter | null = null;
-export function getRateLimiter(): RateLimiter {
-  if (!rateLimiterInstance) {
-    rateLimiterInstance = new RateLimiter();
-  }
-  return rateLimiterInstance;
-}
+export const getRateLimiter = createSingleton(() => new RateLimiter());

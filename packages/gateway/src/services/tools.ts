@@ -4,9 +4,16 @@ import path from 'node:path';
 import util from 'node:util';
 import nodemailer from 'nodemailer';
 import { chromium } from 'playwright';
-import { loadConfig } from '@nova/shared';
+import { ensureDir, generateId, loadConfig, removeFile } from '@nova/shared';
 
 const execPromise = util.promisify(exec);
+
+const SCRIPT_RUNTIMES = {
+  javascript: { extension: 'js', dockerImage: 'node:22-alpine', dockerRuntime: 'node', localCommand: 'node' },
+  python: { extension: 'py', dockerImage: 'python:3.10-alpine', dockerRuntime: 'python', localCommand: 'python' },
+} as const;
+
+type ScriptLanguage = keyof typeof SCRIPT_RUNTIMES;
 
 export interface ToolContext {
   isOwner: boolean;
@@ -99,6 +106,32 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
   }
 ];
 
+/**
+ * Writes code to a temporary script file, runs the command built from its path,
+ * and removes the file afterwards.
+ */
+async function runTempScript(
+  tempDir: string,
+  extension: string,
+  code: string,
+  buildCommand: (scriptPath: string, fileName: string) => string,
+  outputPrefix: string,
+  errorLabel: string
+): Promise<{ success: boolean; output: string }> {
+  const fileName = `${generateId('script')}.${extension}`;
+  const scriptPath = path.join(tempDir, fileName);
+  fs.writeFileSync(scriptPath, code, 'utf-8');
+
+  try {
+    const { stdout, stderr } = await execPromise(buildCommand(scriptPath, fileName));
+    return { success: true, output: `${outputPrefix}Stdout:\n${stdout}\nStderr:\n${stderr}` };
+  } catch (e: any) {
+    return { success: false, output: `${errorLabel}: ${e.message}` };
+  } finally {
+    removeFile(scriptPath);
+  }
+}
+
 async function executeCommandInDockerSandbox(
   command: string, 
   image: string = 'alpine'
@@ -179,8 +212,7 @@ export async function executeTool(
           await page.goto(args.url, { waitUntil: 'domcontentloaded', timeout: 30000 });
           
           if (args.action === 'screenshot') {
-            const tempDir = path.join(loadConfig().paths.memory, 'screenshots');
-            if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
+            const tempDir = ensureDir(path.join(loadConfig().paths.memory, 'screenshots'));
             const shotPath = path.join(tempDir, `${Date.now()}.png`);
             await page.screenshot({ path: shotPath });
             await browserInstance.close();
@@ -241,68 +273,36 @@ export async function executeTool(
       }
 
       case 'code_exec': {
-        const tempDir = path.join(loadConfig().paths.memory, 'temp');
-        if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
-        
+        const language = args.language as ScriptLanguage;
+        const runtime = SCRIPT_RUNTIMES[language];
+        if (!runtime) {
+          return { success: false, output: `Unsupported language: ${args.language}` };
+        }
+
+        const tempDir = ensureDir(path.join(loadConfig().paths.memory, 'temp'));
+
         if (!context.isOwner) {
-          if (args.language === 'javascript') {
-            const filename = `script-${Date.now()}.js`;
-            const scriptPath = path.join(tempDir, filename);
-            fs.writeFileSync(scriptPath, args.code, 'utf-8');
-            try {
-              // Mount temp folder as read-only, limit resources, and run node-alpine container
-              const { stdout, stderr } = await execPromise(
-                `docker run --rm -v "${tempDir}":/sandbox:ro -m 256m --cpus="0.5" --network none node:22-alpine node /sandbox/${filename}`
-              );
-              fs.unlinkSync(scriptPath);
-              return { success: true, output: `[Sandboxed Run] Stdout:\n${stdout}\nStderr:\n${stderr}` };
-            } catch (e: any) {
-              if (fs.existsSync(scriptPath)) fs.unlinkSync(scriptPath);
-              return { success: false, output: `Docker Javascript Sandbox Error: ${e.message}. (Ensure Docker is running)` };
-            }
-          } else if (args.language === 'python') {
-            const filename = `script-${Date.now()}.py`;
-            const scriptPath = path.join(tempDir, filename);
-            fs.writeFileSync(scriptPath, args.code, 'utf-8');
-            try {
-              // Mount temp folder as read-only, limit resources, and run python-alpine container
-              const { stdout, stderr } = await execPromise(
-                `docker run --rm -v "${tempDir}":/sandbox:ro -m 256m --cpus="0.5" --network none python:3.10-alpine python /sandbox/${filename}`
-              );
-              fs.unlinkSync(scriptPath);
-              return { success: true, output: `[Sandboxed Run] Stdout:\n${stdout}\nStderr:\n${stderr}` };
-            } catch (e: any) {
-              if (fs.existsSync(scriptPath)) fs.unlinkSync(scriptPath);
-              return { success: false, output: `Docker Python Sandbox Error: ${e.message}. (Ensure Docker is running)` };
-            }
-          }
+          // Mount temp folder as read-only, limit resources, and run the language's alpine container
+          return runTempScript(
+            tempDir,
+            runtime.extension,
+            args.code,
+            (_scriptPath, fileName) =>
+              `docker run --rm -v "${tempDir}":/sandbox:ro -m 256m --cpus="0.5" --network none ${runtime.dockerImage} ${runtime.dockerRuntime} /sandbox/${fileName}`,
+            '[Sandboxed Run] ',
+            `Docker ${language} Sandbox Error. (Ensure Docker is running)`
+          );
         }
 
         // Owner direct execution (No container overhead)
-        if (args.language === 'javascript') {
-          const scriptPath = path.join(tempDir, `script-${Date.now()}.js`);
-          fs.writeFileSync(scriptPath, args.code, 'utf-8');
-          try {
-            const { stdout, stderr } = await execPromise(`node "${scriptPath}"`);
-            fs.unlinkSync(scriptPath);
-            return { success: true, output: `Stdout:\n${stdout}\nStderr:\n${stderr}` };
-          } catch (e: any) {
-            if (fs.existsSync(scriptPath)) fs.unlinkSync(scriptPath);
-            return { success: false, output: `JavaScript Execution Failed: ${e.message}` };
-          }
-        } else if (args.language === 'python') {
-          const scriptPath = path.join(tempDir, `script-${Date.now()}.py`);
-          fs.writeFileSync(scriptPath, args.code, 'utf-8');
-          try {
-            const { stdout, stderr } = await execPromise(`python "${scriptPath}"`);
-            fs.unlinkSync(scriptPath);
-            return { success: true, output: `Stdout:\n${stdout}\nStderr:\n${stderr}` };
-          } catch (e: any) {
-            if (fs.existsSync(scriptPath)) fs.unlinkSync(scriptPath);
-            return { success: false, output: `Python Execution Failed: ${e.message}. (Ensure Python is installed and added to PATH)` };
-          }
-        }
-        return { success: false, output: `Unsupported language: ${args.language}` };
+        return runTempScript(
+          tempDir,
+          runtime.extension,
+          args.code,
+          scriptPath => `${runtime.localCommand} "${scriptPath}"`,
+          '',
+          `${language} Execution Failed. (Ensure the ${runtime.localCommand} runtime is installed and on PATH)`
+        );
       }
 
       case 'email_send': {
@@ -344,11 +344,7 @@ export async function executeTool(
       }
 
       case 'skill_write': {
-        const config = loadConfig();
-        const skillDir = config.paths.skills;
-        if (!fs.existsSync(skillDir)) {
-          fs.mkdirSync(skillDir, { recursive: true });
-        }
+        const skillDir = ensureDir(loadConfig().paths.skills);
         
         const fileName = args.skillName.toLowerCase().replace(/[^a-z0-9_-]/g, '') + '.md';
         const fullPath = path.join(skillDir, fileName);

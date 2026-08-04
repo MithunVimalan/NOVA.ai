@@ -2,7 +2,8 @@ import {
   generateChatResponse, 
   getSqliteManager, 
   getVectorDbManager, 
-  ChatMessage 
+  ChatMessage,
+  createSingleton
 } from '@nova/shared';
 import { executeTool, BUILT_IN_TOOLS, ToolContext } from './tools.js';
 import { getSkillService } from './skills.js';
@@ -231,10 +232,4 @@ Never call bash, file_write, or browser tools if you are in GUEST/CUSTOMER mode.
 }
 
 // Single instance export
-let sessionManagerInstance: SessionManager | null = null;
-export function getSessionManager(): SessionManager {
-  if (!sessionManagerInstance) {
-    sessionManagerInstance = new SessionManager();
-  }
-  return sessionManagerInstance;
-}
+export const getSessionManager = createSingleton(() => new SessionManager());

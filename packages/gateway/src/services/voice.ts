@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { execSync } from 'node:child_process';
-import { loadConfig } from '@nova/shared';
+import { loadConfig, createSingleton, removeFile, requestJson } from '@nova/shared';
 
 export class VoiceService {
   private config = loadConfig();
@@ -40,20 +40,15 @@ export class VoiceService {
    */
   private async transcribeDeepgram(audioBuffer: Buffer, mimeType: string, apiKey: string): Promise<string> {
     try {
-      const response = await fetch('https://api.deepgram.com/v1/listen?model=nova-2&smart_format=true', {
-        method: 'POST',
+      const data = await requestJson<any>('https://api.deepgram.com/v1/listen?model=nova-2&smart_format=true', {
+        label: 'Deepgram API',
         headers: {
           'Authorization': `Token ${apiKey}`,
           'Content-Type': mimeType,
         },
-        body: audioBuffer as any,
+        rawBody: audioBuffer as any,
       });
 
-      if (!response.ok) {
-        throw new Error(`Deepgram API returned HTTP ${response.status}`);
-      }
-
-      const data: any = await response.json();
       const transcript = data.results?.channels?.[0]?.alternatives?.[0]?.transcript || '';
       return transcript;
     } catch (e: any) {
@@ -103,14 +98,13 @@ export class VoiceService {
       return 'Hello NOVA';
     } finally {
       // Clean up temp files
+      removeFile(tempAudioFile);
+      removeFile(tempTxtFile);
+      // Clean up any extra files whisper generated (.srt, .vtt, etc)
       try {
-        if (fs.existsSync(tempAudioFile)) fs.unlinkSync(tempAudioFile);
-        if (fs.existsSync(tempTxtFile)) fs.unlinkSync(tempTxtFile);
-        // Clean up any extra files whisper generated (.srt, .vtt, etc)
-        const files = fs.readdirSync(tempDir);
-        for (const file of files) {
+        for (const file of fs.readdirSync(tempDir)) {
           if (file.includes(tempOutBase)) {
-            fs.unlinkSync(path.join(tempDir, file));
+            removeFile(path.join(tempDir, file));
           }
         }
       } catch {}
@@ -184,9 +178,7 @@ export class VoiceService {
       // Fallback: Generate a simple 1-second 8kHz square wave (beep) buffer so the client receives playable audio
       return this.generateBeepBuffer();
     } finally {
-      try {
-        if (fs.existsSync(tempWav)) fs.unlinkSync(tempWav);
-      } catch {}
+      removeFile(tempWav);
     }
   }
 
@@ -228,10 +220,4 @@ export class VoiceService {
   }
 }
 
-let voiceServiceInstance: VoiceService | null = null;
-export function getVoiceService(): VoiceService {
-  if (!voiceServiceInstance) {
-    voiceServiceInstance = new VoiceService();
-  }
-  return voiceServiceInstance;
-}
+export const getVoiceService = createSingleton(() => new VoiceService());

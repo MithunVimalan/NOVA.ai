@@ -1,3 +1,5 @@
+import { createSingleton } from '@nova/shared';
+
 export class SecureLogger {
   private sensitiveKeys = ['password', 'token', 'secret', 'key', 'authorization', 'cvv', 'creditcard', 'passphrase'];
 
@@ -25,26 +27,22 @@ export class SecureLogger {
     return redactedObj;
   }
 
-  public info(message: string, context?: any) {
+  private log(level: 'INFO' | 'WARN' | 'ERROR', message: string, context?: any) {
     const redactedContext = context ? this.redact(context) : '';
-    console.log(`[INFO] ${message}`, redactedContext ? JSON.stringify(redactedContext) : '');
+    console.log(`[${level}] ${message}`, redactedContext ? JSON.stringify(redactedContext) : '');
+  }
+
+  public info(message: string, context?: any) {
+    this.log('INFO', message, context);
   }
 
   public warn(message: string, context?: any) {
-    const redactedContext = context ? this.redact(context) : '';
-    console.log(`[WARN] ${message}`, redactedContext ? JSON.stringify(redactedContext) : '');
+    this.log('WARN', message, context);
   }
 
   public error(message: string, context?: any) {
-    const redactedContext = context ? this.redact(context) : '';
-    console.log(`[ERROR] ${message}`, redactedContext ? JSON.stringify(redactedContext) : '');
+    this.log('ERROR', message, context);
   }
 }
 
-let secureLoggerInstance: SecureLogger | null = null;
-export function getSecureLogger(): SecureLogger {
-  if (!secureLoggerInstance) {
-    secureLoggerInstance = new SecureLogger();
-  }
-  return secureLoggerInstance;
-}
+export const getSecureLogger = createSingleton(() => new SecureLogger());

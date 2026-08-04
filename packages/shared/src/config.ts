@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { z } from 'zod';
+import { ensureDir, readJsonFile } from './utils/fs.js';
 
 export const ConfigSchema = z.object({
   ollamaUrl: z.string().default('http://localhost:11434'),
@@ -47,24 +48,12 @@ const DEFAULT_CONFIG_DIR = path.join(os.homedir(), '.nova');
 const CONFIG_FILE_PATH = path.join(DEFAULT_CONFIG_DIR, 'nova.json');
 
 export function getNovaHomeDir(): string {
-  if (!fs.existsSync(DEFAULT_CONFIG_DIR)) {
-    fs.mkdirSync(DEFAULT_CONFIG_DIR, { recursive: true });
-  }
-  return DEFAULT_CONFIG_DIR;
+  return ensureDir(DEFAULT_CONFIG_DIR);
 }
 
 export function loadConfig(): NovaConfig {
   const homeDir = getNovaHomeDir();
-  let fileConfig: any = {};
-
-  if (fs.existsSync(CONFIG_FILE_PATH)) {
-    try {
-      const fileContent = fs.readFileSync(CONFIG_FILE_PATH, 'utf-8');
-      fileConfig = JSON.parse(fileContent);
-    } catch (e) {
-      console.error(`[Config] Failed to parse ${CONFIG_FILE_PATH}. Using defaults.`, e);
-    }
-  }
+  const fileConfig = readJsonFile<any>(CONFIG_FILE_PATH, {}, '[Config]');
 
   // Parse and resolve defaults
   const parsed = ConfigSchema.parse(fileConfig);
@@ -84,9 +73,8 @@ export function loadConfig(): NovaConfig {
 }
 
 export function saveConfig(config: NovaConfig): void {
-  const homeDir = getNovaHomeDir();
+  getNovaHomeDir();
   try {
-    fs.mkdirSync(homeDir, { recursive: true });
     fs.writeFileSync(CONFIG_FILE_PATH, JSON.stringify(config, null, 2), 'utf-8');
   } catch (e) {
     console.error(`[Config] Failed to save config to ${CONFIG_FILE_PATH}`, e);

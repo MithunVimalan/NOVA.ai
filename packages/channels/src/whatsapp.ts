@@ -1,4 +1,5 @@
 import { loadConfig, getSqliteManager } from '@nova/shared';
+import { registerOwnerHeartbeat } from './heartbeat.js';
 
 export function startWhatsAppBot(sessionManager: any, heartbeatService: any): void {
   const config = loadConfig();
@@ -43,15 +44,9 @@ export function startWhatsAppBot(sessionManager: any, heartbeatService: any): vo
           console.log('[WhatsApp] Opened WhatsApp connection successfully.');
           
           // Register heartbeat listener
-          heartbeatService.registerListener('whatsapp', (message: string) => {
-            const sqliteDb = getSqliteManager();
-            const ownerJid = sqliteDb.getFact('owner_whatsapp_jid');
-            if (ownerJid) {
-              sock.sendMessage(ownerJid, { text: message }).catch((e: any) => {
-                console.error('[WhatsApp] Heartbeat send failed:', e);
-              });
-            }
-          });
+          registerOwnerHeartbeat(heartbeatService, 'whatsapp', 'owner_whatsapp_jid', (ownerJid, message) =>
+            sock.sendMessage(ownerJid, { text: message })
+          );
         }
       });
 

@@ -1,4 +1,5 @@
 import { loadConfig } from '../config.js';
+import { requestJson } from '../utils/http.js';
 
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant';
@@ -14,29 +15,19 @@ export async function generateChatResponse(
     ? config.modelRouting.reasoning 
     : config.modelRouting.fast;
   
-  const url = `${config.ollamaUrl}/api/chat`;
-
   try {
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
+    const data = await requestJson<{ message?: { content: string } }>(`${config.ollamaUrl}/api/chat`, {
+      label: 'Ollama chat',
+      body: {
         model: model,
         messages: messages,
         stream: false,
         options: {
           temperature: useReasoningModel ? 0.2 : 0.7,
         }
-      }),
+      },
     });
 
-    if (!response.ok) {
-      throw new Error(`HTTP Error ${response.status}: ${response.statusText}`);
-    }
-
-    const data = await response.json() as { message?: { content: string } };
     if (data.message && data.message.content) {
       return data.message.content;
     }
