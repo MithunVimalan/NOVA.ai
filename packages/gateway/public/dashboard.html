@@ -926,10 +926,19 @@
       }
     }
 
+    function escapeHtml(value) {
+      return String(value == null ? '' : value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
     function appendChatMessage(sender, text) {
       const msg = document.createElement('div');
       msg.className = 'message ' + sender;
-      msg.innerHTML = text.replace(/\n/g, '<br/>');
+      msg.innerHTML = escapeHtml(text).replace(/\n/g, '<br/>');
       const container = document.getElementById('chat-messages-container');
       container.appendChild(msg);
       container.scrollTop = container.scrollHeight;
@@ -953,10 +962,10 @@
           if (data.leads && data.leads.length > 0) {
             tbody.innerHTML = data.leads.map(lead => `
               <tr>
-                <td><b>${lead.name}</b></td>
-                <td><code>${lead.email}</code></td>
-                <td>${lead.sessionId}</td>
-                <td>${new Date(lead.capturedAt).toLocaleString()}</td>
+                <td><b>${escapeHtml(lead.name)}</b></td>
+                <td><code>${escapeHtml(lead.email)}</code></td>
+                <td>${escapeHtml(lead.sessionId)}</td>
+                <td>${escapeHtml(new Date(lead.capturedAt).toLocaleString())}</td>
               </tr>
             `).join('');
           } else {
@@ -978,10 +987,10 @@
             listContainer.innerHTML = Object.entries(facts).map(([key, val]) => `
               <div class="fact-item">
                 <div>
-                  <span class="fact-key">${key}:</span>
-                  <span style="margin-left: 10px;">${val}</span>
+                  <span class="fact-key">${escapeHtml(key)}:</span>
+                  <span style="margin-left: 10px;">${escapeHtml(val)}</span>
                 </div>
-                <button style="background:none; border:none; color:#ef4444; cursor:pointer;" onclick="deleteFact('${key}')">Delete</button>
+                <button style="background:none; border:none; color:#ef4444; cursor:pointer;" onclick="deleteFact('${escapeHtml(key)}')">Delete</button>
               </div>
             `).join('');
           } else {

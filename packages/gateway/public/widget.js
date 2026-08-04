@@ -331,7 +331,7 @@
   function appendMessage(sender: 'user' | 'assistant', text: string) {
     const msg = document.createElement('div');
     msg.className = `nova-msg ${sender}`;
-    msg.innerHTML = text;
+    msg.textContent = text;
     messagesList.appendChild(msg);
     messagesList.scrollTop = messagesList.scrollHeight;
   }

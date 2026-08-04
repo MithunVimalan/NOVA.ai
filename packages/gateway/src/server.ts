@@ -12,6 +12,7 @@ import { getSecureLogger } from './services/logger.js';
 import { Telegraf } from 'telegraf';
 import path from 'node:path';
 import fs from 'node:fs';
+import crypto from 'node:crypto';
 import { loadConfig, getSqliteManager, getVectorDbManager } from '@nova/shared';
 import { getSessionManager } from './services/session.js';
 import { getSkillService } from './services/skills.js';
@@ -22,10 +23,94 @@ import { startTelegramBot, startWhatsAppBot } from '@nova/channels';
 const config = loadConfig();
 const fastify = Fastify({ logger: true });
 
+// Parse comma-separated ALLOWED_ORIGINS env var into an allowlist.
+// Falls back to common localhost dev origins so the wildcard '*' is never used.
+function getAllowedOrigins(): string[] {
+  const raw = process.env.ALLOWED_ORIGINS;
+  if (raw && raw.trim()) {
+    return raw.split(',').map(o => o.trim()).filter(Boolean);
+  }
+  const port = config.channels.dashboard.port;
+  return [
+    `http://localhost:${port}`,
+    `http://127.0.0.1:${port}`,
+  ];
+}
+
+// Verifies a Stripe webhook signature (t=<ts>,v1=<hmac>) against the raw body.
+// Returns true when no STRIPE_WEBHOOK_SECRET is configured (verification skipped),
+// so local/mock setups keep working, and enforces it whenever the secret is set.
+function verifyStripeSignature(request: any): boolean {
+  const secret = process.env.STRIPE_WEBHOOK_SECRET;
+  if (!secret) {
+    return true; // No secret configured -> nothing to verify against.
+  }
+
+  const sigHeader = request.headers['stripe-signature'];
+  const rawBody = request.rawBody;
+  if (!sigHeader || typeof sigHeader !== 'string' || typeof rawBody !== 'string') {
+    return false;
+  }
+
+  const parts = Object.fromEntries(
+    sigHeader.split(',').map(p => p.split('=').map(s => s.trim()))
+  );
+  const timestamp = parts['t'];
+  const provided = parts['v1'];
+  if (!timestamp || !provided) return false;
+
+  const expected = crypto
+    .createHmac('sha256', secret)
+    .update(`${timestamp}.${rawBody}`)
+    .digest('hex');
+
+  const providedBuf = Buffer.from(provided);
+  const expectedBuf = Buffer.from(expected);
+  return providedBuf.length === expectedBuf.length && crypto.timingSafeEqual(providedBuf, expectedBuf);
+}
+
+// Enforce a valid owner JWT on a request. On failure it sends a 401 and
+// returns null; on success it returns the decoded token payload.
+function requireOwner(request: any, reply: any): any {
+  const authHeader = request.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    reply.status(401).send({ error: 'Unauthorized: Missing or invalid authorization token' });
+    return null;
+  }
+  const token = authHeader.split(' ')[1];
+  const decoded = verifyJwt(token);
+  if (!decoded || decoded.role !== 'owner') {
+    reply.status(401).send({ error: 'Unauthorized: Access token is invalid or expired' });
+    return null;
+  }
+  return decoded;
+}
+
 async function main() {
-  // Register CORS
+  // Register CORS with an explicit allowlist (never wildcard).
+  const allowedOrigins = getAllowedOrigins();
   await fastify.register(cors, {
-    origin: '*',
+    origin: (origin, cb) => {
+      // Allow non-browser / same-origin requests that omit the Origin header.
+      if (!origin || allowedOrigins.includes(origin)) {
+        return cb(null, true);
+      }
+      cb(new Error('Not allowed by CORS'), false);
+    },
+  });
+
+  // Capture the raw request body so webhook signatures (e.g. Stripe) can be
+  // verified against the exact bytes received, while still parsing JSON.
+  fastify.addContentTypeParser('application/json', { parseAs: 'string' }, (req, body: string, done) => {
+    (req as any).rawBody = body;
+    if (!body) {
+      return done(null, {});
+    }
+    try {
+      done(null, JSON.parse(body));
+    } catch (err) {
+      done(err as Error, undefined);
+    }
   });
 
   // Register security headers (Helmet fallback)
@@ -193,7 +278,7 @@ async function main() {
       vectorDbStatus = 'active';
     }
 
-    const isSecurityHardened = process.env.JWT_SECRET !== undefined && process.env.JWT_SECRET !== 'nova_default_super_secret_key_12345';
+    const isSecurityHardened = typeof process.env.JWT_SECRET === 'string' && process.env.JWT_SECRET.length >= 16;
 
     return {
       status: (ollamaStatus === 'active' && sqliteStatus === 'active') ? 'healthy' : 'degraded',
@@ -203,7 +288,7 @@ async function main() {
         vectorDb: { status: vectorDbStatus, message: 'LanceDB / Memory Vector Store running' },
         security: {
           status: isSecurityHardened ? 'hardened' : 'default_credentials',
-          message: isSecurityHardened ? 'Custom JWT_SECRET active' : 'Using default JWT_SECRET (Recommended: set JWT_SECRET env var)'
+          message: isSecurityHardened ? 'Custom JWT_SECRET active' : 'No strong JWT_SECRET set; using an ephemeral per-process secret (Recommended: set a JWT_SECRET env var of 16+ chars)'
         }
       }
     };
@@ -270,8 +355,9 @@ async function main() {
     return { success: true };
   });
 
-  // API Route: Get Visitor Stats for Dashboard
-  fastify.get('/api/widget/stats', async (request, reply) => {
+  // API Route: Get Visitor Stats for Dashboard (secured with JWT: exposes lead PII)
+  fastify.get('/api/widget/stats', async (request: any, reply) => {
+    if (!requireOwner(request, reply)) return;
     const logs = sqliteDb.getVisitorLogs();
     const leads = sqliteDb.getLeads();
     
@@ -822,6 +908,11 @@ async function main() {
 
   // Stripe Billing Webhook
   fastify.post('/api/billing/webhook', async (request: any, reply) => {
+    if (!verifyStripeSignature(request)) {
+      secureLogger.warn('Stripe webhook rejected: invalid or missing signature');
+      return reply.status(400).send({ error: 'Invalid webhook signature' });
+    }
+
     const sqliteDb = getSqliteManager();
     const event = request.body;
 
