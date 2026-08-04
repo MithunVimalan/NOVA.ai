@@ -113,7 +113,9 @@ export class VoiceService {
             fs.unlinkSync(path.join(tempDir, file));
           }
         }
-      } catch {}
+      } catch (cleanupErr: any) {
+        console.warn('[VoiceService] Failed to clean up Whisper temp files:', cleanupErr.message);
+      }
     }
   }
 
@@ -186,7 +188,9 @@ export class VoiceService {
     } finally {
       try {
         if (fs.existsSync(tempWav)) fs.unlinkSync(tempWav);
-      } catch {}
+      } catch (cleanupErr: any) {
+        console.warn(`[VoiceService] Failed to remove temp audio file ${tempWav}:`, cleanupErr.message);
+      }
     }
   }
 

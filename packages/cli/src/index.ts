@@ -255,7 +255,9 @@ function installPm2Daemon() {
     // Stop existing instance
     try {
       execSync('pm2 delete nova-gateway', { stdio: 'ignore' });
-    } catch {}
+    } catch {
+      // No existing nova-gateway process to delete
+    }
 
     // Start daemon
     execSync(`pm2 start "${serverPath}" --name "nova-gateway"`, { stdio: 'inherit' });

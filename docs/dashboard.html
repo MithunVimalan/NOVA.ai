@@ -722,8 +722,14 @@
           } else {
             tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--text-muted);">No leads captured yet.</td></tr>`;
           }
+        } else {
+          throw new Error(`Analytics request failed with HTTP ${res.status}`);
         }
-      } catch {}
+      } catch (err) {
+        console.error('[Dashboard] Failed to load analytics:', err);
+        document.getElementById('leads-list-body').innerHTML =
+          `<tr><td colspan="4" style="text-align: center; color: #ef4444;">Failed to load analytics: ${err.message}</td></tr>`;
+      }
     }
 
     // LOAD FACTS
@@ -747,8 +753,14 @@
           } else {
             listContainer.innerHTML = `<p style="color: var(--text-muted);">No facts configured.</p>`;
           }
+        } else {
+          throw new Error(`Facts request failed with HTTP ${res.status}`);
         }
-      } catch {}
+      } catch (err) {
+        console.error('[Dashboard] Failed to load facts:', err);
+        document.getElementById('facts-list-container').innerHTML =
+          `<p style="color:#ef4444;">Failed to load facts: ${err.message}</p>`;
+      }
     }
 
     async function saveFact() {
@@ -767,8 +779,13 @@
           document.getElementById('fact-key-input').value = '';
           document.getElementById('fact-value-input').value = '';
           loadFactsData();
+        } else {
+          throw new Error(`Save request failed with HTTP ${res.status}`);
         }
-      } catch {}
+      } catch (err) {
+        console.error('[Dashboard] Failed to save fact:', err);
+        alert(`Failed to save fact: ${err.message}`);
+      }
     }
 
     // LOAD SKILLS
@@ -794,8 +811,14 @@
           } else {
             listContainer.innerHTML = `<p style="color: var(--text-muted);">No custom skills found. Place Markdown skill files in the skills directory.</p>`;
           }
+        } else {
+          throw new Error(`Skills request failed with HTTP ${res.status}`);
         }
-      } catch {}
+      } catch (err) {
+        console.error('[Dashboard] Failed to load skills:', err);
+        document.getElementById('skills-list-container').innerHTML =
+          `<p style="color:#ef4444;">Failed to load skills: ${err.message}</p>`;
+      }
     }
 
     // SAVE SETTINGS

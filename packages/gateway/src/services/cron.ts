@@ -25,7 +25,8 @@ export class CronService {
         this.jobs = JSON.parse(serializedJobs);
         console.log(`[Cron] Restored ${this.jobs.length} scheduled jobs.`);
         this.startAllJobs();
-      } catch {
+      } catch (err) {
+        console.error('[Cron] Stored job definitions are corrupt, discarding all scheduled jobs:', err);
         this.jobs = [];
       }
     }

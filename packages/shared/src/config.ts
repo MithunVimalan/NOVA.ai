@@ -62,7 +62,10 @@ export function loadConfig(): NovaConfig {
       const fileContent = fs.readFileSync(CONFIG_FILE_PATH, 'utf-8');
       fileConfig = JSON.parse(fileContent);
     } catch (e) {
-      console.error(`[Config] Failed to parse ${CONFIG_FILE_PATH}. Using defaults.`, e);
+      throw new Error(
+        `[Config] Failed to read or parse ${CONFIG_FILE_PATH}: ${(e as Error).message}. Fix or remove the file before starting NOVA.`,
+        { cause: e }
+      );
     }
   }
 
@@ -77,8 +80,13 @@ export function loadConfig(): NovaConfig {
     parsed.paths.skills = path.join(homeDir, 'workspace', 'skills');
   }
 
-  // Save resolved config back if it was missing or modified
-  saveConfig(parsed);
+  // Save resolved config back if it was missing or modified. This is opportunistic:
+  // an unwritable config directory must not prevent the process from reading config.
+  try {
+    saveConfig(parsed);
+  } catch (e) {
+    console.warn(`[Config] Could not persist resolved config:`, (e as Error).message);
+  }
 
   return parsed;
 }
@@ -89,6 +97,6 @@ export function saveConfig(config: NovaConfig): void {
     fs.mkdirSync(homeDir, { recursive: true });
     fs.writeFileSync(CONFIG_FILE_PATH, JSON.stringify(config, null, 2), 'utf-8');
   } catch (e) {
-    console.error(`[Config] Failed to save config to ${CONFIG_FILE_PATH}`, e);
+    throw new Error(`[Config] Failed to save config to ${CONFIG_FILE_PATH}: ${(e as Error).message}`, { cause: e });
   }
 }
