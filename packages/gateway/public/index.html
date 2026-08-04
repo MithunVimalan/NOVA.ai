@@ -782,10 +782,19 @@
       }, 1500);
     }
 
+    function escapeHtml(value) {
+      return String(value == null ? '' : value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
     function appendSandboxMessage(sender, text) {
       const msg = document.createElement('div');
       msg.className = 'sandbox-msg ' + sender;
-      msg.innerHTML = text.replace(/\n/g, '<br/>');
+      msg.innerHTML = escapeHtml(text).replace(/\n/g, '<br/>');
       const chatList = document.getElementById('sandbox-chat-list');
       chatList.appendChild(msg);
       chatList.scrollTop = chatList.scrollHeight;

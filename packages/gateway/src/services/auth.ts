@@ -1,6 +1,27 @@
 import crypto from 'node:crypto';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'nova_default_super_secret_key_12345';
+/**
+ * Resolves the HMAC signing secret for JWTs.
+ *
+ * A hardcoded fallback secret would let anyone forge "owner" tokens, so we
+ * never ship one. When JWT_SECRET is not provided we generate a random,
+ * process-ephemeral secret instead: tokens stay valid for the lifetime of the
+ * running server but cannot be forged by an attacker who read the source.
+ */
+function resolveJwtSecret(): string {
+  const envSecret = process.env.JWT_SECRET;
+  if (envSecret && envSecret.length >= 16) {
+    return envSecret;
+  }
+  if (envSecret) {
+    console.warn('[Auth] JWT_SECRET is set but too short (<16 chars); ignoring it and generating an ephemeral secret.');
+  } else {
+    console.warn('[Auth] JWT_SECRET is not set. Generating a random ephemeral secret. Sessions will be invalidated on restart. Set JWT_SECRET for production.');
+  }
+  return crypto.randomBytes(48).toString('hex');
+}
+
+const JWT_SECRET = resolveJwtSecret();
 
 function base64UrlEncode(str: string): string {
   return Buffer.from(str)
@@ -55,7 +76,9 @@ export function verifyJwt(token: string): any {
       .replace(/\+/g, '-')
       .replace(/\//g, '_');
 
-    if (signature !== expectedSignature) {
+    const sigBuf = Buffer.from(signature);
+    const expectedBuf = Buffer.from(expectedSignature);
+    if (sigBuf.length !== expectedBuf.length || !crypto.timingSafeEqual(sigBuf, expectedBuf)) {
       return null;
     }
 
@@ -91,8 +114,10 @@ export async function verifyPassword(password: string, hash: string): Promise<bo
     if (!salt || !key) return false;
     return new Promise((resolve) => {
       crypto.scrypt(password, salt, 64, (err, derivedKey) => {
-        if (err) resolve(false);
-        resolve(derivedKey.toString('hex') === key);
+        if (err) return resolve(false);
+        const keyBuf = Buffer.from(key, 'hex');
+        if (keyBuf.length !== derivedKey.length) return resolve(false);
+        resolve(crypto.timingSafeEqual(derivedKey, keyBuf));
       });
     });
   } catch {

@@ -10,3 +10,6 @@ nova_db_fallback.json
 whatsapp-auth/
 temp/
 screenshots/
+
+# TypeScript incremental build artifacts
+*.tsbuildinfo
